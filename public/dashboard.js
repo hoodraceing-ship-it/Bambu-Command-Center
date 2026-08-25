@@ -12,7 +12,7 @@
   );
 
   const icons = {
-    printer: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/><path d="M18 12h.01"/></svg>',
+    printer: '<svg class="bambu-mark" viewBox="0 0 94 122" aria-hidden="true"><path d="M50.3856 45.5508V122H94V62.6627L50.3856 45.5508Z" fill="currentColor"/><path d="M50.3856 0V38.2419L94 55.3884V0H50.3856Z" fill="currentColor"/><path d="M0 76.4838V0H43.6143V59.3373L0 76.4838Z" fill="currentColor"/><path d="M0 122V83.7927L43.6143 66.6462V122H0Z" fill="currentColor"/></svg>',
     fullscreen: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>',
     external: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3h7v7M10 14 21 3"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg>',
     settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg>',
@@ -41,7 +41,7 @@
     theme: localStorage.getItem("bcc-theme") || "bambu",
     layout: localStorage.getItem("bcc-layout") || "grid",
     focusedPrinter: null,
-    version: "3.0.0",
+    version: "3.1.0",
   };
 
   const root = document.getElementById("dashboard-root");
@@ -107,6 +107,26 @@
           <div class="modal-actions">
             <button class="modal-button" data-close-modal="confirm-modal">Keep Printing</button>
             <button class="modal-button danger" id="confirm-stop">Stop Print</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-backdrop" id="status-modal" hidden>
+        <div class="modal status-modal" role="dialog" aria-modal="true" aria-labelledby="status-title">
+          <div class="modal-header">
+            <div class="modal-title" id="status-title">${icons.warning}<span>Printer notification</span></div>
+            <button class="icon-button" data-close-modal="status-modal" aria-label="Close">×</button>
+          </div>
+          <div class="modal-content">
+            <div class="notice-heading"><span class="printer-status-dot" id="notice-dot"></span><div><div class="notice-printer" id="notice-printer"></div><div class="notice-state" id="notice-state"></div></div></div>
+            <div class="notice-message" id="notice-message"></div>
+            <div class="notice-facts">
+              <div><span>Job</span><strong id="notice-job">—</strong></div>
+              <div><span>Progress</span><strong id="notice-progress">—</strong></div>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button class="modal-button" data-close-modal="status-modal">Close</button>
+            <button class="modal-button primary" id="status-open-bambuddy">Open Bambuddy</button>
           </div>
         </div>
       </div>
@@ -244,7 +264,7 @@
               <span class="printer-status-dot offline" data-role="status-dot"></span>
               <div><h2 class="printer-name">${escapeHtml(printer.name || `Printer ${id}`)}</h2><div class="printer-model">${escapeHtml(printer.model || "Bambu Lab printer")}</div></div>
             </div>
-            <span class="state-pill" data-role="state-pill" data-tone="amber">Connecting</span>
+            <button class="state-pill" data-role="state-pill" data-command="details" data-tone="amber" aria-label="View printer notification">Connecting</button>
           </div>
           <div class="job-row">
             <div class="job-header"><div class="job-name" data-role="job-name">Loading printer status…</div><div class="job-percent" data-role="job-progress">—%</div></div>
@@ -470,6 +490,53 @@
   function showModal(id) { const modal = document.getElementById(id); if (modal) modal.hidden = false; }
   function closeModal(id) { const modal = document.getElementById(id); if (modal) modal.hidden = true; }
 
+  function noticeText(status, meta) {
+    const direct = [
+      status?.error_message, status?.error, status?.message, status?.notification,
+      status?.warning, status?.finish_reason, status?.hms_message, status?.print_error,
+    ].find((value) => typeof value === "string" && value.trim());
+    if (direct) return direct.trim();
+
+    const collections = [status?.notifications, status?.alerts, status?.warnings, status?.errors, status?.hms];
+    const messages = [];
+    for (const collection of collections) {
+      if (!Array.isArray(collection)) continue;
+      for (const item of collection) {
+        if (typeof item === "string" && item.trim()) messages.push(item.trim());
+        else if (item && typeof item === "object") {
+          const value = item.message || item.text || item.description || item.title || item.code || item.error_code;
+          if (value !== undefined && String(value).trim()) messages.push(String(value).trim());
+        }
+      }
+    }
+    if (messages.length) return [...new Set(messages)].join("\n");
+
+    if (String(status?.state || "").toUpperCase() === "FINISH") {
+      return "The print finished successfully. Bambuddy did not report any additional notification.";
+    }
+    if (meta.tone === "red") {
+      return "The printer reports that attention is required, but no detailed message was included. Open Bambuddy to view the full printer notification.";
+    }
+    return `The printer is currently ${meta.label.toLowerCase()}. No additional notification was reported.`;
+  }
+
+  function showStatusDetails(printerId) {
+    const printer = state.printers.find((item) => Number(item.id) === Number(printerId));
+    const status = state.statuses.get(Number(printerId)) || {};
+    const meta = statusMeta(status);
+    const progress = Math.max(0, Math.min(100, Number(status.progress) || 0));
+    const title = document.querySelector("#status-title span");
+    if (title) title.textContent = meta.tone === "red" ? "Printer needs attention" : `${meta.label} details`;
+    document.getElementById("notice-printer").textContent = printer?.name || "Printer";
+    document.getElementById("notice-state").textContent = meta.label;
+    document.getElementById("notice-message").textContent = noticeText(status, meta);
+    document.getElementById("notice-job").textContent = cleanJobName(status);
+    document.getElementById("notice-progress").textContent = `${Math.round(progress)}%`;
+    const dot = document.getElementById("notice-dot");
+    if (dot) dot.classList.toggle("offline", meta.tone === "red" || !status.connected);
+    showModal("status-modal");
+  }
+
   function askStop(printerId) {
     const printer = state.printers.find((item) => Number(item.id) === Number(printerId));
     const status = state.statuses.get(Number(printerId));
@@ -536,6 +603,7 @@
       closeModal("confirm-modal");
       command(id, "/print/stop", "Stop command sent");
     });
+    document.getElementById("status-open-bambuddy")?.addEventListener("click", openBambuddy);
     document.getElementById("dashboard")?.addEventListener("click", (event) => {
       const button = event.target.closest("[data-command]");
       if (!button || button.disabled) return;
@@ -544,6 +612,7 @@
       const id = Number(card.dataset.printerId);
       const status = state.statuses.get(id);
       switch (button.dataset.command) {
+        case "details": showStatusDetails(id); break;
         case "focus":
           state.focusedPrinter = state.focusedPrinter === id ? null : id;
           applyFocus();
