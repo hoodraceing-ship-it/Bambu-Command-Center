@@ -40,8 +40,9 @@
     connected: true,
     theme: localStorage.getItem("bcc-theme") || "bambu",
     layout: localStorage.getItem("bcc-layout") || "grid",
+    performance: localStorage.getItem("bcc-performance") || (/Silk|Kindle|KF[A-Z0-9]+|Fire/i.test(navigator.userAgent) ? "balanced" : "full"),
     focusedPrinter: null,
-    version: "3.3.0",
+    version: "3.4.0",
     previousStatuses: new Map(),
     alertQueue: [],
     activeAlertPrinter: null,
@@ -53,10 +54,15 @@
   function applyAppearance() {
     document.documentElement.dataset.theme = state.theme;
     document.documentElement.dataset.layout = state.layout;
-    const themeColors = { light: "#eef3f6", arc: "#020c13", workshop: "#11100e", bambu: "#07100e" };
+    document.documentElement.dataset.performance = state.performance;
+    const themeColors = { light: "#eef3f6", overdrive: "#000711", arc: "#020c13", workshop: "#11100e", bambu: "#07100e" };
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColors[state.theme] || themeColors.bambu);
     const subtitle = document.querySelector(".brand-subtitle");
-    if (subtitle) subtitle.textContent = state.theme === "arc" ? "J.A.R.V.I.S. PRINTER ARRAY" : "Local printer control";
+    if (subtitle) {
+      subtitle.textContent = state.theme === "overdrive"
+        ? "STARK INDUSTRIES // FABRICATION GRID"
+        : state.theme === "arc" ? "J.A.R.V.I.S. PRINTER ARRAY" : "Local printer control";
+    }
   }
 
   applyAppearance();
@@ -73,6 +79,12 @@
   function shell() {
     root.innerHTML = `
       <div class="command-shell">
+        <div class="overdrive-backdrop" aria-hidden="true">
+          <span class="overdrive-reactor"><i></i><b></b></span>
+          <span class="overdrive-scan"></span>
+          <span class="overdrive-telemetry overdrive-telemetry-left">SYS. FAB-01<br>REACTOR ONLINE<br>OPTICAL ARRAY LINKED</span>
+          <span class="overdrive-telemetry overdrive-telemetry-right">MARK // XLII<br>SECURE LOCAL LINK<br>STATUS NOMINAL</span>
+        </div>
         <header class="topbar">
           <div class="brand">
             <div class="brand-mark">${icons.printer}</div>
@@ -149,7 +161,7 @@
             <div class="setting-row">
               <div><div class="setting-label">Theme</div><div class="setting-help">Change the color, texture, and overall personality.</div></div>
               <select class="setting-select" id="display-theme">
-                <option value="bambu">Bambu Dark</option><option value="arc">JARVIS Command HUD</option><option value="workshop">Workshop</option><option value="light">Clean Light</option>
+                <option value="bambu">Bambu Dark</option><option value="arc">JARVIS Command HUD</option><option value="overdrive">JARVIS Overdrive</option><option value="workshop">Workshop</option><option value="light">Clean Light</option>
               </select>
             </div>
             <div class="setting-row">
@@ -159,9 +171,15 @@
               </select>
             </div>
             <div class="setting-row">
-              <div><div class="setting-label">Camera quality</div><div class="setting-help">Higher FPS uses more network bandwidth.</div></div>
+              <div><div class="setting-label">Camera frame rate</div><div class="setting-help">HD external cameras stabilize at 15 FPS; native cameras use your selected maximum.</div></div>
               <select class="setting-select" id="camera-fps">
                 <option value="4">4 FPS</option><option value="8">8 FPS</option><option value="12">12 FPS</option><option value="15">15 FPS</option><option value="24">24 FPS</option><option value="30">30 FPS</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-label">Performance</div><div class="setting-help">Balanced is optimized for Fire tablets while preserving the full HUD design.</div></div>
+              <select class="setting-select" id="performance-mode">
+                <option value="balanced">Balanced — Fire tablet</option><option value="full">Full effects</option><option value="eco">Eco — maximum smoothness</option>
               </select>
             </div>
             <div class="setting-row">
@@ -286,6 +304,8 @@
           </div>
           <div class="camera-progress" data-role="camera-progress">—</div>
           <div class="hud-unit">UNIT ${String(id).padStart(2, "0")} // OPTICAL FEED</div>
+          <div class="overdrive-reticle" aria-hidden="true"><i></i><b></b></div>
+          <div class="overdrive-camera-data" aria-hidden="true"><span>VISUAL LINK ${String(id).padStart(2, "0")}</span><span>TRACKING // ACTIVE</span></div>
         </div>
         <div class="card-content">
           <div class="card-heading">
@@ -342,7 +362,14 @@
     const printer = state.printers.find((item) => Number(item.id) === Number(id));
     const hasExternalCamera = Boolean(printer?.external_camera_url);
     const lowFpsCamera = !hasExternalCamera && /(?:A1|P1)/i.test(`${printer?.name || ""} ${printer?.model || ""}`);
-    const cameraFps = lowFpsCamera ? Math.min(state.cameraFps, 5) : state.cameraFps;
+    // Bambuddy converts external RTSP sources to MJPEG. Requesting more frames
+    // than the Wyze source can provide creates duplicate work and buffer growth,
+    // especially in Fire OS browsers. Fifteen FPS keeps HD responsive while
+    // native P2S/X-series streams may still use the selected higher ceiling.
+    const performanceCap = state.performance === "eco" ? 8 : state.performance === "balanced" ? 12 : 30;
+    const cameraFps = lowFpsCamera
+      ? Math.min(state.cameraFps, 5)
+      : hasExternalCamera ? Math.min(state.cameraFps, performanceCap, 15) : Math.min(state.cameraFps, performanceCap);
     const src = `${config.apiBase}/printers/${id}/camera/stream?fps=${cameraFps}`;
     refs.camera.classList.add("is-loading");
     refs.camera.classList.remove("has-error");
@@ -782,6 +809,7 @@
       document.getElementById("display-theme").value = state.theme;
       document.getElementById("display-layout").value = state.layout;
       document.getElementById("camera-fps").value = String(state.cameraFps);
+      document.getElementById("performance-mode").value = state.performance;
       document.getElementById("poll-seconds").value = String(state.pollSeconds);
       showModal("settings-modal");
     });
@@ -790,15 +818,18 @@
       const nextPoll = Number(document.getElementById("poll-seconds").value) || 3;
       const nextTheme = document.getElementById("display-theme").value || "bambu";
       const nextLayout = document.getElementById("display-layout").value || "grid";
-      const cameraChanged = nextFps !== state.cameraFps;
+      const nextPerformance = document.getElementById("performance-mode").value || "balanced";
+      const cameraChanged = nextFps !== state.cameraFps || nextPerformance !== state.performance;
       state.cameraFps = nextFps;
       state.pollSeconds = nextPoll;
       state.theme = nextTheme;
       state.layout = nextLayout;
+      state.performance = nextPerformance;
       localStorage.setItem("bcc-camera-fps", String(nextFps));
       localStorage.setItem("bcc-poll-seconds", String(nextPoll));
       localStorage.setItem("bcc-theme", nextTheme);
       localStorage.setItem("bcc-layout", nextLayout);
+      localStorage.setItem("bcc-performance", nextPerformance);
       state.focusedPrinter = null;
       applyAppearance();
       applyFocus();
