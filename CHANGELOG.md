@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.2.0
+
+- Added a live estimated finish time beside each printer's remaining time.
+- Added automatic printer-style dialogs for completed, paused, failed, plate-clear, and HMS attention states.
+- Added Bambuddy HMS action buttons, clear-alert control, resume, and plate-clear actions directly in notification dialogs.
+
 ## 3.1.0
 
 - Replaced the generic printer badge with the Bambu Lab mark.
