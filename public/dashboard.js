@@ -41,7 +41,7 @@
     theme: localStorage.getItem("bcc-theme") || "bambu",
     layout: localStorage.getItem("bcc-layout") || "grid",
     focusedPrinter: null,
-    version: "3.2.2",
+    version: "3.3.0",
     previousStatuses: new Map(),
     alertQueue: [],
     activeAlertPrinter: null,
@@ -53,7 +53,10 @@
   function applyAppearance() {
     document.documentElement.dataset.theme = state.theme;
     document.documentElement.dataset.layout = state.layout;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", state.theme === "light" ? "#eef3f6" : "#07100e");
+    const themeColors = { light: "#eef3f6", arc: "#020c13", workshop: "#11100e", bambu: "#07100e" };
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColors[state.theme] || themeColors.bambu);
+    const subtitle = document.querySelector(".brand-subtitle");
+    if (subtitle) subtitle.textContent = state.theme === "arc" ? "J.A.R.V.I.S. PRINTER ARRAY" : "Local printer control";
   }
 
   applyAppearance();
@@ -146,7 +149,7 @@
             <div class="setting-row">
               <div><div class="setting-label">Theme</div><div class="setting-help">Change the color, texture, and overall personality.</div></div>
               <select class="setting-select" id="display-theme">
-                <option value="bambu">Bambu Dark</option><option value="arc">Arc Reactor</option><option value="workshop">Workshop</option><option value="light">Clean Light</option>
+                <option value="bambu">Bambu Dark</option><option value="arc">JARVIS Command HUD</option><option value="workshop">Workshop</option><option value="light">Clean Light</option>
               </select>
             </div>
             <div class="setting-row">
@@ -158,7 +161,7 @@
             <div class="setting-row">
               <div><div class="setting-label">Camera quality</div><div class="setting-help">Higher FPS uses more network bandwidth.</div></div>
               <select class="setting-select" id="camera-fps">
-                <option value="4">4 FPS</option><option value="8">8 FPS</option><option value="12">12 FPS</option>
+                <option value="4">4 FPS</option><option value="8">8 FPS</option><option value="12">12 FPS</option><option value="15">15 FPS</option><option value="24">24 FPS</option><option value="30">30 FPS</option>
               </select>
             </div>
             <div class="setting-row">
@@ -282,6 +285,7 @@
             <span class="camera-badge-actions"><span class="camera-state" data-role="camera-state">Connecting</span><button class="camera-focus" data-command="focus" aria-label="Focus ${escapeHtml(printer.name)}" title="Focus printer">${icons.focus}</button></span>
           </div>
           <div class="camera-progress" data-role="camera-progress">—</div>
+          <div class="hud-unit">UNIT ${String(id).padStart(2, "0")} // OPTICAL FEED</div>
         </div>
         <div class="card-content">
           <div class="card-heading">
@@ -336,7 +340,8 @@
     const refs = state.cards.get(id);
     if (!refs) return;
     const printer = state.printers.find((item) => Number(item.id) === Number(id));
-    const lowFpsCamera = /(?:A1|P1)/i.test(`${printer?.name || ""} ${printer?.model || ""}`);
+    const hasExternalCamera = Boolean(printer?.external_camera_url);
+    const lowFpsCamera = !hasExternalCamera && /(?:A1|P1)/i.test(`${printer?.name || ""} ${printer?.model || ""}`);
     const cameraFps = lowFpsCamera ? Math.min(state.cameraFps, 5) : state.cameraFps;
     const src = `${config.apiBase}/printers/${id}/camera/stream?fps=${cameraFps}`;
     refs.camera.classList.add("is-loading");
@@ -861,6 +866,7 @@
   }
 
   shell();
+  applyAppearance();
   bindEvents();
   startClock();
   loadVersion();
