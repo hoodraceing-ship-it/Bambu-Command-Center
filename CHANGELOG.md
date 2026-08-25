@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.4.0
+
+- Added JARVIS Overdrive as a separate, dramatically stronger full-screen fabrication HUD with a central animated reactor, sweeping optical grid, targeting reticles, telemetry rails, angular cards, and high-contrast cyan/amber controls.
+- Stabilized HD external-camera playback at 15 FPS to prevent duplicate RTSP-to-MJPEG work and browser buffer growth while leaving higher selected frame rates available to capable native printer cameras.
+- Added explicit external-camera streaming guidance to Display Settings.
+- Added automatic Fire/Silk tablet detection and Full, Balanced, and Eco performance profiles; Balanced removes costly blur and continuous HUD rotations while capping video conversion at 12 FPS.
+
 ## 3.3.0
 
 - Rebuilt Arc Reactor as the animated JARVIS Command HUD theme with holographic grids, scan lines, reactor effects, camera targeting overlays, and angular telemetry panels.
