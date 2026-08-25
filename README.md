@@ -10,6 +10,7 @@ The gear menu saves the selected appearance on each tablet.
 - **Layouts:** Command Grid, Camera Wall, Swipe Focus, and Status Rail
 - **Focus mode:** tap the expand icon on any printer camera to temporarily make that printer fill the dashboard
 - **Multi-printer:** Command Grid scales to three printers; Swipe Focus remains easy to use on smaller tablets
+- **Notification details:** tap a printer's status pill to see Bambuddy warnings, errors, completion details, and job information
 
 ## Install
 
@@ -91,3 +92,5 @@ Set Fully Kiosk Browser's start URL to `http://<SERVER-IP>:8092`, enable launch 
 ## License
 
 MIT
+
+Bambu Lab and the Bambu Lab logo are trademarks of their respective owner. This community dashboard is not affiliated with or endorsed by Bambu Lab.
