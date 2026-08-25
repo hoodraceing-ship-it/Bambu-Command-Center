@@ -1,0 +1,6 @@
+services:
+  bambu-command-center:
+    build: .
+    image: bambu-command-center:development
+  command-center-updater:
+    profiles: ["disabled"]
