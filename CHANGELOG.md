@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.3.0
+
+- Rebuilt Arc Reactor as the animated JARVIS Command HUD theme with holographic grids, scan lines, reactor effects, camera targeting overlays, and angular telemetry panels.
+- Added 15, 24, and 30 FPS camera settings.
+- Allow external A1/P1 camera replacements such as Wyze Bridge feeds to use the selected higher frame rate instead of the native-camera cap.
+
 ## 3.2.2
 
 - Match Bambuddy's HMS filtering for two uncataloged, non-actionable P2S firmware records.
