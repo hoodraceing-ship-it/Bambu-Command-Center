@@ -41,7 +41,7 @@
     theme: localStorage.getItem("bcc-theme") || "bambu",
     layout: localStorage.getItem("bcc-layout") || "grid",
     focusedPrinter: null,
-    version: "3.2.0",
+    version: "3.2.1",
     previousStatuses: new Map(),
     alertQueue: [],
     activeAlertPrinter: null,
@@ -200,7 +200,7 @@
   function statusMeta(status) {
     if (!status || !status.connected) return { label: "Offline", tone: "red" };
     if (Array.isArray(status.hms_errors) && status.hms_errors.length) return { label: "Attention", tone: "red" };
-    if (status.awaiting_plate_clear) return { label: "Clear Plate", tone: "amber" };
+    if (plateClearNeeded(status)) return { label: "Clear Plate", tone: "amber" };
     const current = String(status.state || "IDLE").toUpperCase();
     const map = {
       RUNNING: ["Printing", "green"], PAUSE: ["Paused", "amber"], PREPARE: ["Preparing", "amber"],
@@ -212,6 +212,10 @@
 
   function activeState(value) {
     return ["RUNNING", "PAUSE", "PREPARE", "SLICING"].includes(String(value || "").toUpperCase());
+  }
+
+  function plateClearNeeded(status) {
+    return Boolean(status?.awaiting_plate_clear) && !activeState(status?.state);
   }
 
   function formatTime(minutesValue) {
@@ -416,10 +420,11 @@
     refs.pauseButton.disabled = !status.connected || (!paused && currentState !== "RUNNING");
     refs.stopButton.disabled = !status.connected || !printing;
     refs.lightButton.classList.toggle("active", Boolean(status.chamber_light));
-    refs.refreshButton.dataset.command = status.awaiting_plate_clear ? "clear-plate" : "refresh";
-    refs.refreshButton.classList.toggle("active", Boolean(status.awaiting_plate_clear));
-    refs.refreshIcon.innerHTML = status.awaiting_plate_clear ? icons.layers : icons.refresh;
-    refs.refreshLabel.textContent = status.awaiting_plate_clear ? "Plate Clear" : "Refresh";
+    const needsPlateClear = plateClearNeeded(status);
+    refs.refreshButton.dataset.command = needsPlateClear ? "clear-plate" : "refresh";
+    refs.refreshButton.classList.toggle("active", needsPlateClear);
+    refs.refreshIcon.innerHTML = needsPlateClear ? icons.layers : icons.refresh;
+    refs.refreshLabel.textContent = needsPlateClear ? "Plate Clear" : "Refresh";
     refs.speedButtons.forEach((button) => {
       button.disabled = !status.connected || !printing;
       button.classList.toggle("active", Number(button.dataset.value) === Number(status.speed_level));
@@ -600,7 +605,7 @@
   function alertDescriptor(status) {
     const errors = Array.isArray(status?.hms_errors) ? status.hms_errors : [];
     if (errors.length) return { kind: "hms", signature: `hms:${errors.map(hmsCode).sort().join(",")}`, important: true };
-    if (status?.awaiting_plate_clear) return { kind: "plate", signature: `plate:${cleanJobName(status)}`, important: true };
+    if (plateClearNeeded(status)) return { kind: "plate", signature: `plate:${cleanJobName(status)}`, important: true };
     const current = String(status?.state || "").toUpperCase();
     if (current === "FAILED") return { kind: "failed", signature: `failed:${cleanJobName(status)}`, important: true };
     if (current === "FINISH") return { kind: "finish", signature: `finish:${cleanJobName(status)}`, important: true };
@@ -672,7 +677,7 @@
     });
     actions.innerHTML = actionItems.map((item, index) => `<button class="modal-button primary notice-hms-action" data-action-index="${index}">${escapeHtml(actionLabel(item.action))}</button>`).join("");
     if (errors.length) actions.insertAdjacentHTML("beforeend", '<button class="modal-button notice-clear-hms" data-command="clear-hms">Clear Alert</button>');
-    if (status?.awaiting_plate_clear) actions.insertAdjacentHTML("beforeend", '<button class="modal-button primary" data-notice-command="clear-plate">Plate Is Clear</button>');
+    if (plateClearNeeded(status)) actions.insertAdjacentHTML("beforeend", '<button class="modal-button primary" data-notice-command="clear-plate">Plate Is Clear</button>');
     else if (!errors.length && String(status?.state || "").toUpperCase() === "PAUSE") actions.insertAdjacentHTML("beforeend", '<button class="modal-button primary" data-notice-command="resume">Resume Print</button>');
     actions.querySelectorAll("[data-action-index]").forEach((button) => {
       button.addEventListener("click", () => {
