@@ -41,7 +41,10 @@
     theme: localStorage.getItem("bcc-theme") || "bambu",
     layout: localStorage.getItem("bcc-layout") || "grid",
     focusedPrinter: null,
-    version: "3.1.0",
+    version: "3.2.0",
+    previousStatuses: new Map(),
+    alertQueue: [],
+    activeAlertPrinter: null,
   };
 
   const root = document.getElementById("dashboard-root");
@@ -122,9 +125,12 @@
             <div class="notice-facts">
               <div><span>Job</span><strong id="notice-job">—</strong></div>
               <div><span>Progress</span><strong id="notice-progress">—</strong></div>
+              <div><span>Estimated finish</span><strong id="notice-finish">—</strong></div>
             </div>
+            <div class="notice-errors" id="notice-errors" hidden></div>
           </div>
           <div class="modal-actions">
+            <span class="notice-action-buttons" id="notice-action-buttons"></span>
             <button class="modal-button" data-close-modal="status-modal">Close</button>
             <button class="modal-button primary" id="status-open-bambuddy">Open Bambuddy</button>
           </div>
@@ -193,6 +199,8 @@
 
   function statusMeta(status) {
     if (!status || !status.connected) return { label: "Offline", tone: "red" };
+    if (Array.isArray(status.hms_errors) && status.hms_errors.length) return { label: "Attention", tone: "red" };
+    if (status.awaiting_plate_clear) return { label: "Clear Plate", tone: "amber" };
     const current = String(status.state || "IDLE").toUpperCase();
     const map = {
       RUNNING: ["Printing", "green"], PAUSE: ["Paused", "amber"], PREPARE: ["Preparing", "amber"],
@@ -216,6 +224,19 @@
     if (days) return `${days}d ${hours}h`;
     if (hours) return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
     return `${minutes}m`;
+  }
+
+  function finishTime(minutesValue) {
+    const value = Number(minutesValue);
+    if (!Number.isFinite(value) || value <= 0) return "—";
+    const finish = new Date(Date.now() + value * 60000);
+    const today = new Date();
+    const sameDay = finish.getFullYear() === today.getFullYear()
+      && finish.getMonth() === today.getMonth()
+      && finish.getDate() === today.getDate();
+    return new Intl.DateTimeFormat([], sameDay
+      ? { hour: "numeric", minute: "2-digit" }
+      : { weekday: "short", hour: "numeric", minute: "2-digit" }).format(finish);
   }
 
   function formatTemp(current, target) {
@@ -271,7 +292,7 @@
             <div class="progress-track"><div class="progress-fill" data-role="progress-fill"></div></div>
           </div>
           <div class="metrics">
-            <div class="metric"><span class="metric-icon">${icons.clock}</span><span class="metric-copy"><span class="metric-value" data-role="time">—</span><span class="metric-label">Remaining</span></span></div>
+            <div class="metric"><span class="metric-icon">${icons.clock}</span><span class="metric-copy"><span class="metric-value" data-role="time">—</span><span class="metric-label" data-role="finish-time">Calculating finish</span></span></div>
             <div class="metric"><span class="metric-icon">${icons.layers}</span><span class="metric-copy"><span class="metric-value" data-role="layers">—</span><span class="metric-label">Layer</span></span></div>
             <div class="metric"><span class="metric-icon">${icons.nozzle}</span><span class="metric-copy"><span class="metric-value" data-role="nozzle">—</span><span class="metric-label">Nozzle</span></span></div>
             <div class="metric"><span class="metric-icon">${icons.bed}</span><span class="metric-copy"><span class="metric-value" data-role="bed">—</span><span class="metric-label">Bed</span></span></div>
@@ -300,7 +321,7 @@
     state.cards.set(id, {
       root: card, camera: get("camera"), cameraState: get("camera-state"), cameraProgress: get("camera-progress"),
       statusDot: get("status-dot"), statePill: get("state-pill"), jobName: get("job-name"), jobProgress: get("job-progress"), progressFill: get("progress-fill"),
-      time: get("time"), layers: get("layers"), nozzle: get("nozzle"), bed: get("bed"), ams: get("ams"), pauseLabel: get("pause-label"),
+      time: get("time"), finishTime: get("finish-time"), layers: get("layers"), nozzle: get("nozzle"), bed: get("bed"), ams: get("ams"), pauseLabel: get("pause-label"),
       pauseButton: card.querySelector('[data-command="pause-resume"]'), lightButton: card.querySelector('[data-command="light"]'),
       stopButton: card.querySelector('[data-command="stop"]'), refreshButton: card.querySelector('[data-command="refresh"]'),
       refreshIcon: get("refresh-icon"), refreshLabel: get("refresh-label"), speedButtons: Array.from(card.querySelectorAll('[data-command="speed"]')),
@@ -385,6 +406,8 @@
     refs.jobProgress.textContent = `${Math.round(progress)}%`;
     refs.progressFill.style.width = `${progress}%`;
     refs.time.textContent = formatTime(status.remaining_time);
+    const eta = printing ? finishTime(status.remaining_time) : "—";
+    refs.finishTime.textContent = eta === "—" ? "Remaining" : `Finishes ${eta}`;
     refs.layers.textContent = Number(status.total_layers) > 0 ? `${status.layer_num || 0} / ${status.total_layers}` : "—";
     refs.nozzle.textContent = formatTemp(status.temperatures?.nozzle, status.temperatures?.nozzle_target);
     refs.bed.textContent = formatTemp(status.temperatures?.bed, status.temperatures?.bed_target);
@@ -433,8 +456,11 @@
       if (result.status === "fulfilled") {
         successes += 1;
         const [printer, status] = result.value;
+        const previousStatus = state.previousStatuses.get(Number(printer.id));
         state.statuses.set(Number(printer.id), status);
         updateCard(printer, status);
+        queuePrinterAlert(printer, status, previousStatus);
+        state.previousStatuses.set(Number(printer.id), status);
       }
     }
     state.connected = successes > 0;
@@ -487,10 +513,123 @@
     }
   }
 
+  async function jsonCommand(printerId, path, body, successMessage) {
+    try {
+      const result = await api(`/printers/${printerId}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        timeout: 12000,
+      });
+      toast(result?.message || successMessage || "Command sent");
+      closeModal("status-modal");
+      setTimeout(pollStatuses, 650);
+    } catch (error) {
+      toast(error?.message || "The command failed", true);
+    }
+  }
+
   function showModal(id) { const modal = document.getElementById(id); if (modal) modal.hidden = false; }
-  function closeModal(id) { const modal = document.getElementById(id); if (modal) modal.hidden = true; }
+  function closeModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.hidden = true;
+    if (id === "status-modal") {
+      state.activeAlertPrinter = null;
+      setTimeout(showNextQueuedAlert, 120);
+    }
+  }
+
+  const commonHmsMessages = {
+    "0300_4006": "The nozzle is clogged.",
+    "0300_4008": "The AMS failed to change filament.",
+    "0300_400C": "The print was canceled.",
+    "0300_8000": "Printing paused for an unknown reason. Check the printer, then resume when it is safe.",
+    "0300_8001": "Printing was paused by the user.",
+    "0300_8002": "First-layer defects were detected. Check the first layer before continuing.",
+    "0300_8003": "Spaghetti defects were detected. Inspect the print before continuing.",
+    "0300_8004": "Filament ran out. Load new filament before resuming.",
+    "0300_8005": "The toolhead front cover came off. Reinstall it and inspect the print.",
+    "0300_8006": "The build-plate marker was not detected. Check the plate position and marker.",
+    "0300_8007": "An unfinished job was detected after power loss. You may be able to resume it.",
+    "0300_800B": "The filament cutter is stuck.",
+    "0300_800C": "A skipped step was detected and auto-recovery completed. Inspect for layer shift before resuming.",
+    "0300_800D": "The extruder is not extruding normally. Inspect the print before resuming.",
+    "0300_800F": "The enclosure door appears open, so printing was paused.",
+    "0300_8011": "The detected build plate does not match the sliced file.",
+    "0300_8013": "The print reached a programmed pause.",
+    "0300_8015": "The external spool ran out. Load filament, then resume.",
+    "0300_8016": "The nozzle may be clogged. Clean it before resuming.",
+    "0300_8017": "A foreign object was detected on the heatbed. Clear the bed before resuming.",
+    "0300_8019": "No build plate was detected.",
+    "0300_801A": "A filament extrusion error was detected. Check the extruder before resuming or canceling.",
+    "0500_400E": "Printing was canceled.",
+  };
+
+  function hmsCode(error) {
+    const raw = String(error?.full_code || error?.code || "UNKNOWN").toUpperCase().replace(/[^0-9A-F]/g, "");
+    const attr = Number(error?.attr);
+    const codeNumber = Number.parseInt(String(error?.code || "0").replace(/[^0-9A-F]/gi, ""), 16);
+    if (Number.isFinite(attr) && Number.isFinite(codeNumber)) {
+      const module = ((attr >> 16) & 0xFFFF) || (((attr >> 8) & 0xFF) << 8) | (attr & 0xFF);
+      return `${module.toString(16).padStart(4, "0").toUpperCase()}_${(codeNumber & 0xFFFF).toString(16).padStart(4, "0").toUpperCase()}`;
+    }
+    if (raw.length === 8) return `${raw.slice(0, 4)}_${raw.slice(4)}`;
+    if (raw.length >= 16) return `${raw.slice(0, 4)}_${raw.slice(-4)}`;
+    return String(error?.code || error?.full_code || "Unknown");
+  }
+
+  function hmsSeverity(error) {
+    return ({ 1: "Fatal", 2: "Serious", 3: "Warning", 4: "Information" })[Number(error?.severity)] || "Printer alert";
+  }
+
+  function hmsMessage(error) {
+    const code = hmsCode(error);
+    return commonHmsMessages[code] || `The printer reported HMS ${code}. Follow the printer's on-screen guidance or open Bambuddy for the full troubleshooting entry.`;
+  }
+
+  function actionLabel(action) {
+    const overrides = {
+      resume_after_error: "Resume Print", retry: "Try Again", done: "Done",
+      check_filament: "Filament Checked", check_assistant: "Open Assistant",
+      continue_print: "Continue", stop_print: "Stop Print",
+    };
+    const key = String(action || "").toLowerCase();
+    return overrides[key] || key.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  function alertDescriptor(status) {
+    const errors = Array.isArray(status?.hms_errors) ? status.hms_errors : [];
+    if (errors.length) return { kind: "hms", signature: `hms:${errors.map(hmsCode).sort().join(",")}`, important: true };
+    if (status?.awaiting_plate_clear) return { kind: "plate", signature: `plate:${cleanJobName(status)}`, important: true };
+    const current = String(status?.state || "").toUpperCase();
+    if (current === "FAILED") return { kind: "failed", signature: `failed:${cleanJobName(status)}`, important: true };
+    if (current === "FINISH") return { kind: "finish", signature: `finish:${cleanJobName(status)}`, important: true };
+    if (current === "PAUSE") return { kind: "pause", signature: `pause:${cleanJobName(status)}`, important: false };
+    return null;
+  }
+
+  function queuePrinterAlert(printer, status, previousStatus) {
+    const alert = alertDescriptor(status);
+    if (!alert) return;
+    const previous = alertDescriptor(previousStatus);
+    if (previous?.signature === alert.signature) return;
+    if (!alert.important && !previousStatus) return;
+    const queued = state.alertQueue.some((item) => Number(item.printer.id) === Number(printer.id) && item.alert.signature === alert.signature);
+    if (queued || (state.activeAlertPrinter && Number(state.activeAlertPrinter) === Number(printer.id))) return;
+    state.alertQueue.push({ printer, status, alert });
+    showNextQueuedAlert();
+  }
+
+  function showNextQueuedAlert() {
+    if (state.activeAlertPrinter !== null || !state.alertQueue.length) return;
+    const next = state.alertQueue.shift();
+    state.activeAlertPrinter = Number(next.printer.id);
+    showStatusDetails(next.printer.id, next.status, next.alert.kind);
+  }
 
   function noticeText(status, meta) {
+    const hmsErrors = Array.isArray(status?.hms_errors) ? status.hms_errors : [];
+    if (hmsErrors.length) return hmsErrors.map((error) => hmsMessage(error)).join("\n\n");
     const direct = [
       status?.error_message, status?.error, status?.message, status?.notification,
       status?.warning, status?.finish_reason, status?.hms_message, status?.print_error,
@@ -520,18 +659,65 @@
     return `The printer is currently ${meta.label.toLowerCase()}. No additional notification was reported.`;
   }
 
-  function showStatusDetails(printerId) {
+  function renderNoticeErrors(printerId, status) {
+    const errors = Array.isArray(status?.hms_errors) ? status.hms_errors : [];
+    const list = document.getElementById("notice-errors");
+    const actions = document.getElementById("notice-action-buttons");
+    if (!list || !actions) return;
+    list.hidden = !errors.length;
+    list.innerHTML = errors.map((error) => `<div class="notice-error-row"><span>${escapeHtml(hmsCode(error))}</span><strong>${escapeHtml(hmsSeverity(error))}</strong></div>`).join("");
+    const actionItems = [];
+    errors.forEach((error, errorIndex) => {
+      (Array.isArray(error.actions) ? error.actions : []).forEach((action) => actionItems.push({ error, errorIndex, action }));
+    });
+    actions.innerHTML = actionItems.map((item, index) => `<button class="modal-button primary notice-hms-action" data-action-index="${index}">${escapeHtml(actionLabel(item.action))}</button>`).join("");
+    if (errors.length) actions.insertAdjacentHTML("beforeend", '<button class="modal-button notice-clear-hms" data-command="clear-hms">Clear Alert</button>');
+    if (status?.awaiting_plate_clear) actions.insertAdjacentHTML("beforeend", '<button class="modal-button primary" data-notice-command="clear-plate">Plate Is Clear</button>');
+    else if (!errors.length && String(status?.state || "").toUpperCase() === "PAUSE") actions.insertAdjacentHTML("beforeend", '<button class="modal-button primary" data-notice-command="resume">Resume Print</button>');
+    actions.querySelectorAll("[data-action-index]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const item = actionItems[Number(button.dataset.actionIndex)];
+        if (!item) return;
+        jsonCommand(printerId, "/hms/execute-action", {
+          action: item.action,
+          print_error: item.error.full_code || String(item.error.code || "").replaceAll("_", ""),
+          job_id: item.error.job_id ?? null,
+        }, `${actionLabel(item.action)} sent`);
+      });
+    });
+    actions.querySelector("[data-command='clear-hms']")?.addEventListener("click", () => {
+      closeModal("status-modal");
+      command(printerId, "/hms/clear", "Printer alert cleared");
+    });
+    actions.querySelector("[data-notice-command='clear-plate']")?.addEventListener("click", () => {
+      closeModal("status-modal");
+      command(printerId, "/clear-plate", "Plate marked clear");
+    });
+    actions.querySelector("[data-notice-command='resume']")?.addEventListener("click", () => {
+      closeModal("status-modal");
+      command(printerId, "/print/resume", "Resume command sent");
+    });
+  }
+
+  function showStatusDetails(printerId, suppliedStatus = null, alertKind = null) {
+    state.activeAlertPrinter = Number(printerId);
     const printer = state.printers.find((item) => Number(item.id) === Number(printerId));
-    const status = state.statuses.get(Number(printerId)) || {};
+    const status = suppliedStatus || state.statuses.get(Number(printerId)) || {};
     const meta = statusMeta(status);
     const progress = Math.max(0, Math.min(100, Number(status.progress) || 0));
     const title = document.querySelector("#status-title span");
-    if (title) title.textContent = meta.tone === "red" ? "Printer needs attention" : `${meta.label} details`;
+    const titleByKind = {
+      hms: "Printer needs attention", plate: "Print finished — clear the plate",
+      failed: "Print failed", finish: "Print finished", pause: "Print paused",
+    };
+    if (title) title.textContent = titleByKind[alertKind] || (meta.tone === "red" ? "Printer needs attention" : `${meta.label} details`);
     document.getElementById("notice-printer").textContent = printer?.name || "Printer";
     document.getElementById("notice-state").textContent = meta.label;
     document.getElementById("notice-message").textContent = noticeText(status, meta);
     document.getElementById("notice-job").textContent = cleanJobName(status);
     document.getElementById("notice-progress").textContent = `${Math.round(progress)}%`;
+    document.getElementById("notice-finish").textContent = activeState(status.state) ? finishTime(status.remaining_time) : "—";
+    renderNoticeErrors(printerId, status);
     const dot = document.getElementById("notice-dot");
     if (dot) dot.classList.toggle("offline", meta.tone === "red" || !status.connected);
     showModal("status-modal");
