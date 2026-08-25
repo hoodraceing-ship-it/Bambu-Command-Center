@@ -158,10 +158,24 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--green); ou
 .notice-printer { color: var(--text); font-size: 1rem; font-weight: 780; letter-spacing: -.02em; }
 .notice-state { margin-top: 3px; color: var(--muted); font-size: .65rem; font-weight: 780; letter-spacing: .1em; text-transform: uppercase; }
 .notice-message { margin-top: 17px; padding: 15px; border: 1px solid var(--line); border-radius: 13px; background: rgba(255,255,255,.025); color: var(--text); font-size: .78rem; font-weight: 600; line-height: 1.55; white-space: pre-line; }
-.notice-facts { display: grid; grid-template-columns: 1fr 110px; gap: 9px; margin-top: 10px; }
+.notice-facts { display: grid; grid-template-columns: minmax(0,1fr) 92px 125px; gap: 9px; margin-top: 10px; }
 .notice-facts > div { min-width: 0; padding: 11px 12px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.018); }
 .notice-facts span { display: block; color: var(--muted-2); font-size: .55rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .notice-facts strong { display: block; overflow: hidden; margin-top: 5px; color: var(--text); font-size: .74rem; text-overflow: ellipsis; white-space: nowrap; }
+.notice-errors { display: grid; gap: 7px; margin-top: 10px; }
+.notice-error-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px; border: 1px solid rgba(255,111,120,.2); border-radius: 11px; background: rgba(255,111,120,.055); }
+.notice-error-row span { color: #ffc1c5; font-family: ui-monospace,SFMono-Regular,Consolas,monospace; font-size: .69rem; font-weight: 760; }
+.notice-error-row strong { color: #ff8d95; font-size: .63rem; letter-spacing: .07em; text-transform: uppercase; }
+.notice-action-buttons { display: flex; flex: 1 1 auto; flex-wrap: wrap; gap: 8px; margin-right: auto; }
+.notice-action-buttons:empty { display: none; }
+.notice-action-buttons .modal-button { min-width: 0; }
+
+@media (max-width: 560px) {
+  .notice-facts { grid-template-columns: 1fr 1fr; }
+  .notice-facts > div:first-child { grid-column: 1 / -1; }
+  .status-modal .modal-actions { flex-wrap: wrap; }
+  .notice-action-buttons { width: 100%; }
+}
 
 @media (max-width: 880px) {
   .command-shell { grid-template-rows: 66px minmax(0,1fr); }
