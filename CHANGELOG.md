@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.2.1
+
+- Ignore Bambuddy's stale `awaiting_plate_clear` flag while a printer is actively printing, preparing, slicing, or paused.
+- Prevent the Plate Is Clear action from appearing inside an active-print HMS notification.
+
 ## 3.2.0
 
 - Added a live estimated finish time beside each printer's remaining time.
