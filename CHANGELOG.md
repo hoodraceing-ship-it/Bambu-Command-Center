@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.1.0
+
+- Replaced the generic printer badge with the Bambu Lab mark.
+- Made printer state pills tappable for finished, warning, and current-state details.
+- Added a notification dialog that surfaces Bambuddy messages, errors, warnings, job name, and progress.
+
 ## 3.0.0
 
 - Added Bambu Dark, Arc Reactor, Workshop, and Clean Light themes.
