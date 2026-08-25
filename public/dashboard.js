@@ -41,7 +41,7 @@
     theme: localStorage.getItem("bcc-theme") || "bambu",
     layout: localStorage.getItem("bcc-layout") || "grid",
     focusedPrinter: null,
-    version: "3.2.1",
+    version: "3.2.2",
     previousStatuses: new Map(),
     alertQueue: [],
     activeAlertPrinter: null,
@@ -199,7 +199,7 @@
 
   function statusMeta(status) {
     if (!status || !status.connected) return { label: "Offline", tone: "red" };
-    if (Array.isArray(status.hms_errors) && status.hms_errors.length) return { label: "Attention", tone: "red" };
+    if (visibleHmsErrors(status).length) return { label: "Attention", tone: "red" };
     if (plateClearNeeded(status)) return { label: "Clear Plate", tone: "amber" };
     const current = String(status.state || "IDLE").toUpperCase();
     const map = {
@@ -570,6 +570,22 @@
     "0500_400E": "Printing was canceled.",
   };
 
+  // Newer P2S firmware currently reports these records, but Bambuddy's own
+  // error catalog does not recognize them and the printer supplies no actions.
+  // Bambuddy intentionally suppresses uncataloged, non-actionable HMS records.
+  const ignoredHmsFullCodes = new Set([
+    "0500060000020070",
+    "050002000003000A",
+  ]);
+
+  function visibleHmsErrors(status) {
+    const errors = Array.isArray(status?.hms_errors) ? status.hms_errors : [];
+    return errors.filter((error) => {
+      const fullCode = String(error?.full_code || "").toUpperCase().replace(/[^0-9A-F]/g, "");
+      return !ignoredHmsFullCodes.has(fullCode) || (Array.isArray(error?.actions) && error.actions.length > 0);
+    });
+  }
+
   function hmsCode(error) {
     const raw = String(error?.full_code || error?.code || "UNKNOWN").toUpperCase().replace(/[^0-9A-F]/g, "");
     const attr = Number(error?.attr);
@@ -584,7 +600,7 @@
   }
 
   function hmsSeverity(error) {
-    return ({ 1: "Fatal", 2: "Serious", 3: "Warning", 4: "Information" })[Number(error?.severity)] || "Printer alert";
+    return ({ 1: "Fatal", 2: "Serious", 3: "Warning" })[Number(error?.severity)] || "Information";
   }
 
   function hmsMessage(error) {
@@ -603,7 +619,7 @@
   }
 
   function alertDescriptor(status) {
-    const errors = Array.isArray(status?.hms_errors) ? status.hms_errors : [];
+    const errors = visibleHmsErrors(status);
     if (errors.length) return { kind: "hms", signature: `hms:${errors.map(hmsCode).sort().join(",")}`, important: true };
     if (plateClearNeeded(status)) return { kind: "plate", signature: `plate:${cleanJobName(status)}`, important: true };
     const current = String(status?.state || "").toUpperCase();
@@ -633,7 +649,7 @@
   }
 
   function noticeText(status, meta) {
-    const hmsErrors = Array.isArray(status?.hms_errors) ? status.hms_errors : [];
+    const hmsErrors = visibleHmsErrors(status);
     if (hmsErrors.length) return hmsErrors.map((error) => hmsMessage(error)).join("\n\n");
     const direct = [
       status?.error_message, status?.error, status?.message, status?.notification,
@@ -665,7 +681,7 @@
   }
 
   function renderNoticeErrors(printerId, status) {
-    const errors = Array.isArray(status?.hms_errors) ? status.hms_errors : [];
+    const errors = visibleHmsErrors(status);
     const list = document.getElementById("notice-errors");
     const actions = document.getElementById("notice-action-buttons");
     if (!list || !actions) return;
