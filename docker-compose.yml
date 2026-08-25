@@ -1,0 +1,22 @@
+services:
+  bambu-command-center:
+    image: ghcr.io/hoodraceing-ship-it/bambu-command-center:latest
+    container_name: bambu-command-center
+    restart: unless-stopped
+    network_mode: host
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    environment:
+      PORT: "${PORT:-8092}"
+      BAMBUDDY_URL: "${BAMBUDDY_URL:-http://127.0.0.1:8001}"
+      BAMBUDDY_BROWSER_URL: "${BAMBUDDY_BROWSER_URL:-}"
+      BAMBUDDY_API_KEY: "${BAMBUDDY_API_KEY:-}"
+      BAMBUDDY_CAMERA_TOKEN: "${BAMBUDDY_CAMERA_TOKEN:-}"
+
+  command-center-updater:
+    image: containrrr/watchtower:1.7.1
+    container_name: command-center-updater
+    restart: unless-stopped
+    command: --label-enable --cleanup --interval 300
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
