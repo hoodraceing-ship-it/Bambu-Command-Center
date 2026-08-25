@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.2.2
+
+- Match Bambuddy's HMS filtering for two uncataloged, non-actionable P2S firmware records.
+- Treat Bambuddy severity values above 3 as informational, matching Bambuddy's current behavior.
+
 ## 3.2.1
 
 - Ignore Bambuddy's stale `awaiting_plate_clear` flag while a printer is actively printing, preparing, slicing, or paused.
