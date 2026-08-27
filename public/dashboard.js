@@ -42,7 +42,7 @@
     layout: localStorage.getItem("bcc-layout") || "grid",
     performance: localStorage.getItem("bcc-performance") || (/Silk|Kindle|KF[A-Z0-9]+|Fire/i.test(navigator.userAgent) ? "balanced" : "full"),
     focusedPrinter: null,
-    version: "3.4.0",
+    version: "3.5.0",
     previousStatuses: new Map(),
     alertQueue: [],
     activeAlertPrinter: null,
@@ -60,7 +60,7 @@
     const subtitle = document.querySelector(".brand-subtitle");
     if (subtitle) {
       subtitle.textContent = state.theme === "overdrive"
-        ? "STARK INDUSTRIES // FABRICATION GRID"
+        ? "J.A.R.V.I.S. // MARK V FABRICATION ARRAY"
         : state.theme === "arc" ? "J.A.R.V.I.S. PRINTER ARRAY" : "Local printer control";
     }
   }
@@ -161,7 +161,7 @@
             <div class="setting-row">
               <div><div class="setting-label">Theme</div><div class="setting-help">Change the color, texture, and overall personality.</div></div>
               <select class="setting-select" id="display-theme">
-                <option value="bambu">Bambu Dark</option><option value="arc">JARVIS Command HUD</option><option value="overdrive">JARVIS Overdrive</option><option value="workshop">Workshop</option><option value="light">Clean Light</option>
+                <option value="bambu">Bambu Dark</option><option value="arc">JARVIS Command HUD</option><option value="overdrive">JARVIS Overdrive // Mark V</option><option value="workshop">Workshop</option><option value="light">Clean Light</option>
               </select>
             </div>
             <div class="setting-row">
@@ -295,6 +295,7 @@
     const id = Number(printer.id);
     return `
       <article class="printer-card" data-printer-id="${id}">
+        <div class="bay-identity" aria-hidden="true"><span>FAB BAY</span><strong>${String(id).padStart(2, "0")}</strong></div>
         <div class="camera-frame">
           <div class="camera-placeholder">Connecting camera…<span>Live feed from Bambuddy</span></div>
           <img class="camera-feed is-loading" alt="Live camera for ${escapeHtml(printer.name)}" data-role="camera">
@@ -306,8 +307,10 @@
           <div class="hud-unit">UNIT ${String(id).padStart(2, "0")} // OPTICAL FEED</div>
           <div class="overdrive-reticle" aria-hidden="true"><i></i><b></b></div>
           <div class="overdrive-camera-data" aria-hidden="true"><span>VISUAL LINK ${String(id).padStart(2, "0")}</span><span>TRACKING // ACTIVE</span></div>
+          <div class="camera-target-frame" aria-hidden="true"><i></i><b></b></div>
         </div>
         <div class="card-content">
+          <div class="card-power-rail" aria-hidden="true"><span></span><b></b><i></i></div>
           <div class="card-heading">
             <div class="card-title">
               <span class="printer-status-dot offline" data-role="status-dot"></span>
@@ -387,7 +390,7 @@
 
   function renderPrinters(printers) {
     const dashboard = document.getElementById("dashboard");
-    dashboard.innerHTML = `<div class="printer-grid" style="--printer-count:${Math.max(1, printers.length)}">${printers.map(cardTemplate).join("")}</div>`;
+    dashboard.innerHTML = `<div class="printer-grid" data-count="${printers.length}" style="--printer-count:${Math.max(1, printers.length)}">${printers.map(cardTemplate).join("")}</div>`;
     state.cards.clear();
     for (const card of dashboard.querySelectorAll("[data-printer-id]")) {
       const id = Number(card.dataset.printerId);

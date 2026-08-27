@@ -226,7 +226,7 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--green); ou
 .camera-focus svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 .camera-focus:hover, .camera-focus.active { border-color: var(--green); color: var(--green); }
 .version-row { display: flex; justify-content: space-between; margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted-2); font-size: .64rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.overdrive-backdrop, .overdrive-reticle, .overdrive-camera-data { display: none; }
+.overdrive-backdrop, .overdrive-reticle, .overdrive-camera-data, .bay-identity, .camera-target-frame, .card-power-rail { display: none; }
 
 html[data-theme="arc"] {
   --bg: #01070b; --surface: #03111a; --surface-2: #061b27; --surface-3: #0a2633;
@@ -667,6 +667,127 @@ html[data-layout="grid"] .printer-card { min-width: 300px; }
 html[data-layout="grid"] .printer-grid:has(.printer-card:nth-child(3)) .printer-card { grid-template-rows: minmax(210px,39%) minmax(0,61%); }
 html[data-layout="grid"] .printer-grid:has(.printer-card:nth-child(3)) .metric { padding: 7px; }
 html[data-layout="grid"] .printer-grid:has(.printer-card:nth-child(3)) .metric-icon { display: none; }
+
+/* Mark V command deck ---------------------------------------------------- */
+html[data-theme="overdrive"] .dashboard {
+  background:
+    linear-gradient(90deg,transparent 0 1.2%,rgba(56,225,255,.17) 1.25% 1.36%,transparent 1.4% 98.6%,rgba(255,185,52,.14) 98.64% 98.75%,transparent 98.8%),
+    linear-gradient(180deg,rgba(46,226,255,.05),transparent 24%,transparent 78%,rgba(0,202,255,.045));
+}
+html[data-theme="overdrive"] .dashboard::before,
+html[data-theme="overdrive"] .dashboard::after {
+  position: absolute; z-index: 0; top: 10px; bottom: 10px; width: 11px; content: ""; pointer-events: none;
+}
+html[data-theme="overdrive"] .dashboard::before {
+  left: 2px; border-top: 2px solid #4ceaff; border-bottom: 2px solid #4ceaff;
+  background: repeating-linear-gradient(180deg,#36daf8 0 5px,transparent 5px 15px);
+  box-shadow: 0 0 13px rgba(40,220,255,.42);
+}
+html[data-theme="overdrive"] .dashboard::after {
+  right: 2px; border-top: 2px solid #ffc050; border-bottom: 2px solid #ffc050;
+  background: repeating-linear-gradient(180deg,#ffb933 0 5px,transparent 5px 15px);
+  box-shadow: 0 0 13px rgba(255,177,38,.34);
+}
+html[data-theme="overdrive"] .printer-grid { position: relative; z-index: 1; }
+html[data-theme="overdrive"] .printer-card {
+  overflow: visible;
+  background:
+    linear-gradient(135deg,rgba(24,115,143,.12),transparent 22%),
+    linear-gradient(315deg,rgba(255,160,22,.06),transparent 18%),
+    linear-gradient(150deg,rgba(2,30,45,.985),rgba(0,7,15,.995));
+  box-shadow: 0 0 0 1px rgba(53,225,255,.14),0 0 28px rgba(0,197,248,.12),0 20px 55px rgba(0,2,11,.82),inset 0 0 55px rgba(0,197,245,.045);
+}
+html[data-theme="overdrive"] .printer-card:nth-child(even) {
+  box-shadow: 0 0 0 1px rgba(53,225,255,.14),0 0 38px rgba(0,215,255,.18),0 20px 55px rgba(0,2,11,.82),inset 0 0 60px rgba(0,197,245,.055);
+}
+html[data-theme="overdrive"] .bay-identity {
+  position: absolute; z-index: 8; top: 78px; left: -7px; display: grid; width: 42px; padding: 6px 3px 7px;
+  border: 1px solid rgba(75,231,255,.55); border-left: 3px solid #57ebff;
+  background: rgba(0,14,25,.94); box-shadow: 0 0 17px rgba(36,222,255,.25),inset 0 0 12px rgba(39,218,255,.09);
+  color: #64eaff; font-family: ui-monospace,SFMono-Regular,Consolas,monospace; text-align: center;
+  clip-path: polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,0 100%);
+}
+html[data-theme="overdrive"] .bay-identity span { font-size: .38rem; font-weight: 800; letter-spacing: .08em; writing-mode: vertical-rl; transform: rotate(180deg); justify-self: center; }
+html[data-theme="overdrive"] .bay-identity strong { margin-top: 5px; color: #ffc252; font-size: .76rem; text-shadow: 0 0 8px rgba(255,181,43,.55); }
+html[data-theme="overdrive"] .camera-target-frame {
+  position: absolute; z-index: 4; inset: 47px 13px 13px; display: block; opacity: .8; pointer-events: none;
+  background:
+    linear-gradient(#65efff,#65efff) left top/40px 2px no-repeat,
+    linear-gradient(#65efff,#65efff) left top/2px 40px no-repeat,
+    linear-gradient(#ffc04c,#ffc04c) right top/27px 2px no-repeat,
+    linear-gradient(#ffc04c,#ffc04c) right top/2px 27px no-repeat,
+    linear-gradient(#ffc04c,#ffc04c) left bottom/27px 2px no-repeat,
+    linear-gradient(#ffc04c,#ffc04c) left bottom/2px 27px no-repeat,
+    linear-gradient(#65efff,#65efff) right bottom/40px 2px no-repeat,
+    linear-gradient(#65efff,#65efff) right bottom/2px 40px no-repeat;
+  filter: drop-shadow(0 0 5px rgba(54,226,255,.45));
+}
+html[data-theme="overdrive"] .camera-target-frame::before,
+html[data-theme="overdrive"] .camera-target-frame::after { position: absolute; top: 50%; width: 28px; height: 1px; background: #5aeaff; content: ""; box-shadow: 0 0 6px #31dcff; }
+html[data-theme="overdrive"] .camera-target-frame::before { left: 0; }
+html[data-theme="overdrive"] .camera-target-frame::after { right: 0; }
+html[data-theme="overdrive"] .card-content { overflow: hidden; }
+html[data-theme="overdrive"] .card-power-rail {
+  position: absolute; z-index: 0; top: 0; right: 0; bottom: 0; display: block; width: 5px;
+  background: linear-gradient(180deg,#42eaff 0 42%,rgba(58,226,255,.1) 42% 62%,#ffc04a 62% 100%);
+  box-shadow: 0 0 11px rgba(48,222,255,.45);
+}
+html[data-theme="overdrive"] .card-power-rail span,
+html[data-theme="overdrive"] .card-power-rail b,
+html[data-theme="overdrive"] .card-power-rail i { position: absolute; right: 8px; width: 28px; height: 1px; background: currentColor; content: ""; }
+html[data-theme="overdrive"] .card-power-rail span { top: 22%; color: #45e8ff; }
+html[data-theme="overdrive"] .card-power-rail b { top: 50%; color: #45e8ff; }
+html[data-theme="overdrive"] .card-power-rail i { bottom: 18%; color: #ffc04a; }
+html[data-theme="overdrive"] .card-heading,
+html[data-theme="overdrive"] .job-row,
+html[data-theme="overdrive"] .metrics,
+html[data-theme="overdrive"] .ams-strip,
+html[data-theme="overdrive"] .card-content > div:last-child { position: relative; z-index: 1; }
+html[data-theme="overdrive"] .card-heading { padding-left: 3px; }
+html[data-theme="overdrive"] .printer-status-dot { width: 15px; height: 15px; box-shadow: 0 0 0 5px rgba(53,226,255,.08),0 0 5px #fff,0 0 22px #19dbff; }
+html[data-theme="overdrive"] .job-row { box-shadow: inset 3px 0 rgba(75,231,255,.7),inset -2px 0 rgba(255,185,55,.32),0 0 20px rgba(0,201,249,.05); }
+html[data-theme="overdrive"] .metric { min-width: 0; }
+html[data-theme="overdrive"] .metric-value { font-size: clamp(.67rem,.92vw,.82rem); }
+html[data-theme="overdrive"] .control-button { position: relative; overflow: hidden; }
+html[data-theme="overdrive"] .control-button::after { position: absolute; right: 7px; bottom: 4px; left: 7px; height: 1px; background: linear-gradient(90deg,transparent,currentColor,transparent); content: ""; opacity: .45; }
+
+/* Three-bay landscape: fit every control without vertical clipping. */
+@media (min-width: 1101px) and (max-height: 900px) and (orientation: landscape) {
+  html[data-layout="grid"] .printer-grid[data-count="3"] { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .printer-card { grid-template-rows: minmax(250px,50%) minmax(0,50%); }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .card-content { grid-template-rows: auto auto auto auto minmax(76px,auto); align-content: stretch; gap: 5px; padding: 9px 11px 10px; }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .card-heading { min-height: 40px; gap: 7px; }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .card-title { gap: 8px; }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .printer-name { font-size: clamp(.82rem,1.28vw,1.05rem); }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .printer-model { margin-top: 2px; font-size: .54rem; }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .state-pill { min-width: 66px; padding: 6px 8px; font-size: .54rem; }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .job-row { padding: 7px 10px 8px; }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .progress-track { height: 6px; margin-top: 6px; }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .metrics { gap: 5px; }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .metric { min-height: 45px; padding: 6px 7px; }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .metric-icon { display: none; }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .metric-label { margin-top: 3px; font-size: .47rem; }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .ams-strip { min-height: 26px; }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .spool-chip { height: 26px; padding: 4px 7px; }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .spool-color { width: 11px; height: 11px; }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .speed-row { gap: 3px; padding: 3px; }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .speed-button { min-height: 27px; font-size: .5rem; }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .control-row { gap: 4px; margin-top: 4px !important; }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .control-button { min-height: 40px; gap: 4px; padding: 0 5px; font-size: .58rem; }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .button-icon svg { width: 14px; height: 14px; }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .camera-progress { bottom: 14px; }
+}
+
+@media (min-width: 1101px) and (max-height: 760px) and (orientation: landscape) {
+  html[data-layout="grid"] .printer-grid[data-count="3"] .printer-card { grid-template-rows: minmax(230px,48%) minmax(0,52%); }
+  html[data-layout="grid"] .printer-grid[data-count="3"] .ams-strip { display: none; }
+}
+
+/* Balanced keeps the spectacle, but turns moving decoration into a static HUD. */
+html[data-theme="overdrive"][data-performance="balanced"] .camera-target-frame { filter: none; opacity: .67; }
+html[data-theme="overdrive"][data-performance="balanced"] .printer-card { box-shadow: 0 0 0 1px rgba(53,225,255,.12),0 12px 30px rgba(0,4,13,.64),inset 0 0 24px rgba(0,187,234,.03); }
+html[data-theme="overdrive"][data-performance="balanced"] .dashboard::before,
+html[data-theme="overdrive"][data-performance="balanced"] .dashboard::after { box-shadow: none; }
 
 html[data-layout="wall"] .printer-card { grid-template-rows: minmax(300px,64%) minmax(0,36%); }
 html[data-layout="wall"] .card-content { grid-template-rows: auto auto auto; align-content: stretch; }

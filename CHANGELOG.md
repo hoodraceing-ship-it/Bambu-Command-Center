@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.5.0
+
+- Rebuilt the three-printer landscape grid so the complete camera, status, telemetry, speed, filament, and control stack fits without clipped buttons.
+- Upgraded JARVIS Overdrive to the Mark V command-deck treatment with fabrication-bay numbering, illuminated power rails, target frames, stronger reactor depth, and more dramatic cyan/amber contrast.
+- Improved narrow-card typography and telemetry density for the Fire HD 10 while preserving touch-friendly controls.
+- Kept the cinematic look performant: Balanced mode retains the structural HUD but disables continuous high-cost motion and filters.
+
 ## 3.4.0
 
 - Added JARVIS Overdrive as a separate, dramatically stronger full-screen fabrication HUD with a central animated reactor, sweeping optical grid, targeting reticles, telemetry rails, angular cards, and high-contrast cyan/amber controls.
