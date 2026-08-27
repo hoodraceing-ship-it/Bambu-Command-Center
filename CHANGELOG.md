@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.5.1
+
+- Added a one-time display migration for tablets that retained the older JARVIS HUD and Camera Wall settings after the Mark V release.
+- Automatically switches that broken narrow-card combination to JARVIS Overdrive Mark V with Command Grid, then preserves all future theme and layout choices.
+- Repaired Camera Wall itself so three printers always receive equal-width bays instead of two narrow columns followed by one oversized column.
+- Replaced automatic printer-event popups with a persistent notification center, unread badge, stored event history, detailed alert actions, individual dismissal, and Clear All.
+
 ## 3.5.0
 
 - Rebuilt the three-printer landscape grid so the complete camera, status, telemetry, speed, filament, and control stack fits without clipped buttons.

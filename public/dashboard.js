@@ -27,7 +27,20 @@
     refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7L20 14"/><path d="M20 7v4h-4"/></svg>',
     warning: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20L12 3Z"/><path d="M12 9v5M12 18h.01"/></svg>',
     focus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/></svg>',
+    bell: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>',
   };
+
+  // v3.5 introduced the Mark V three-bay design, but existing Fire tablets
+  // retained the older HUD + Camera Wall values in localStorage. That exact
+  // combination produces two squeezed cards and one oversized auto column.
+  // Migrate it once, then leave all later user choices untouched.
+  const savedTheme = localStorage.getItem("bcc-theme");
+  const savedLayout = localStorage.getItem("bcc-layout");
+  if (localStorage.getItem("bcc-mark-v-migrated") !== "1") {
+    if (!savedTheme || savedTheme === "arc") localStorage.setItem("bcc-theme", "overdrive");
+    if (!savedLayout || savedLayout === "wall") localStorage.setItem("bcc-layout", "grid");
+    localStorage.setItem("bcc-mark-v-migrated", "1");
+  }
 
   const state = {
     printers: [],
@@ -42,10 +55,15 @@
     layout: localStorage.getItem("bcc-layout") || "grid",
     performance: localStorage.getItem("bcc-performance") || (/Silk|Kindle|KF[A-Z0-9]+|Fire/i.test(navigator.userAgent) ? "balanced" : "full"),
     focusedPrinter: null,
-    version: "3.5.0",
+    version: "3.5.1",
     previousStatuses: new Map(),
-    alertQueue: [],
     activeAlertPrinter: null,
+    notifications: (() => {
+      try {
+        const saved = JSON.parse(localStorage.getItem("bcc-notifications") || "[]");
+        return Array.isArray(saved) ? saved.slice(0, 30) : [];
+      } catch { return []; }
+    })(),
   };
 
   const root = document.getElementById("dashboard-root");
@@ -99,11 +117,20 @@
           </div>
           <div class="top-actions">
             <time class="clock" id="clock"></time>
+            <button class="icon-button notification-button" id="notification-button" aria-label="Open notification center" title="Notifications">${icons.bell}<span class="notification-badge" id="notification-badge" hidden>0</span></button>
             <button class="icon-button" id="fullscreen-button" aria-label="Enter fullscreen" title="Fullscreen">${icons.fullscreen}</button>
             <button class="icon-button" id="bambuddy-button" aria-label="Open Bambuddy" title="Open Bambuddy">${icons.external}</button>
             <button class="icon-button" id="settings-button" aria-label="Dashboard settings" title="Settings">${icons.settings}</button>
           </div>
         </header>
+        <aside class="notification-center" id="notification-center" hidden aria-label="Notification center">
+          <div class="notification-center-header">
+            <div><span class="notification-kicker">J.A.R.V.I.S. event log</span><h2>Notification Center</h2></div>
+            <div class="notification-header-actions"><button class="notification-clear" id="notification-clear-all">Clear All</button><button class="notification-close" id="notification-close" aria-label="Close notification center">×</button></div>
+          </div>
+          <div class="notification-list" id="notification-list"></div>
+          <div class="notification-empty" id="notification-empty"><span>${icons.bell}</span><strong>All systems nominal</strong><p>Printer alerts and completed jobs will collect here.</p></div>
+        </aside>
         <section class="dashboard" id="dashboard">
           <div class="loading-screen">
             <div class="loading-card">
@@ -167,7 +194,7 @@
             <div class="setting-row">
               <div><div class="setting-label">Layout</div><div class="setting-help">Choose how multiple printers share the screen.</div></div>
               <select class="setting-select" id="display-layout">
-                <option value="grid">Command Grid</option><option value="wall">Camera Wall</option><option value="focus">Swipe Focus</option><option value="rail">Status Rail</option>
+                <option value="grid">Command Grid — equal bays</option><option value="wall">Camera Wall — large feeds</option><option value="focus">Swipe Focus</option><option value="rail">Status Rail</option>
               </select>
             </div>
             <div class="setting-row">
@@ -575,7 +602,6 @@
     if (modal) modal.hidden = true;
     if (id === "status-modal") {
       state.activeAlertPrinter = null;
-      setTimeout(showNextQueuedAlert, 120);
     }
   }
 
@@ -670,17 +696,71 @@
     const previous = alertDescriptor(previousStatus);
     if (previous?.signature === alert.signature) return;
     if (!alert.important && !previousStatus) return;
-    const queued = state.alertQueue.some((item) => Number(item.printer.id) === Number(printer.id) && item.alert.signature === alert.signature);
-    if (queued || (state.activeAlertPrinter && Number(state.activeAlertPrinter) === Number(printer.id))) return;
-    state.alertQueue.push({ printer, status, alert });
-    showNextQueuedAlert();
+    const duplicate = state.notifications.some((item) => Number(item.printerId) === Number(printer.id) && item.signature === alert.signature);
+    if (duplicate) return;
+    const meta = statusMeta(status);
+    const snapshotKeys = [
+      "connected", "state", "progress", "subtask_name", "current_print", "gcode_file", "remaining_time",
+      "layer_num", "total_layers", "temperatures", "awaiting_plate_clear", "hms_errors", "error_message",
+      "error", "message", "notification", "warning", "finish_reason", "hms_message", "print_error",
+      "notifications", "alerts", "warnings", "errors", "hms", "speed_level", "chamber_light",
+    ];
+    const snapshot = {};
+    snapshotKeys.forEach((key) => { if (status?.[key] !== undefined) snapshot[key] = status[key]; });
+    state.notifications.unshift({
+      id: `${Date.now()}-${printer.id}-${Math.random().toString(16).slice(2, 8)}`,
+      printerId: Number(printer.id), printerName: printer.name || `Printer ${printer.id}`,
+      kind: alert.kind, signature: alert.signature, important: alert.important,
+      createdAt: Date.now(), read: false, stateLabel: meta.label,
+      job: cleanJobName(status), message: noticeText(status, meta), snapshot,
+    });
+    state.notifications = state.notifications.slice(0, 30);
+    persistNotifications();
+    renderNotificationCenter();
   }
 
-  function showNextQueuedAlert() {
-    if (state.activeAlertPrinter !== null || !state.alertQueue.length) return;
-    const next = state.alertQueue.shift();
-    state.activeAlertPrinter = Number(next.printer.id);
-    showStatusDetails(next.printer.id, next.status, next.alert.kind);
+  function persistNotifications() {
+    try { localStorage.setItem("bcc-notifications", JSON.stringify(state.notifications)); }
+    catch {
+      state.notifications = state.notifications.slice(0, 12);
+      try { localStorage.setItem("bcc-notifications", JSON.stringify(state.notifications)); } catch { /* Storage is optional. */ }
+    }
+  }
+
+  function notificationTitle(kind) {
+    return ({ hms: "Printer needs attention", plate: "Build plate needs clearing", failed: "Print failed", finish: "Print finished", pause: "Print paused" })[kind] || "Printer update";
+  }
+
+  function notificationTime(value) {
+    const date = new Date(Number(value) || Date.now());
+    const sameDay = date.toDateString() === new Date().toDateString();
+    return new Intl.DateTimeFormat([], sameDay ? { hour: "numeric", minute: "2-digit" } : { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
+  }
+
+  function renderNotificationCenter() {
+    const list = document.getElementById("notification-list");
+    const empty = document.getElementById("notification-empty");
+    const badge = document.getElementById("notification-badge");
+    const button = document.getElementById("notification-button");
+    const clear = document.getElementById("notification-clear-all");
+    const unread = state.notifications.filter((item) => !item.read).length;
+    if (badge) {
+      badge.textContent = unread > 99 ? "99+" : String(unread);
+      badge.hidden = unread === 0;
+    }
+    button?.classList.toggle("has-notifications", unread > 0);
+    if (clear) clear.disabled = state.notifications.length === 0;
+    if (!list || !empty) return;
+    empty.hidden = state.notifications.length > 0;
+    list.hidden = state.notifications.length === 0;
+    list.innerHTML = state.notifications.map((item) => `
+      <article class="notification-item${item.read ? "" : " unread"}" data-notification-id="${escapeHtml(item.id)}">
+        <button class="notification-open" data-notification-action="open">
+          <span class="notification-severity" data-kind="${escapeHtml(item.kind)}"></span>
+          <span class="notification-copy"><span class="notification-item-top"><strong>${escapeHtml(notificationTitle(item.kind))}</strong><time>${escapeHtml(notificationTime(item.createdAt))}</time></span><span class="notification-printer">${escapeHtml(item.printerName)} · ${escapeHtml(item.stateLabel || "Update")}</span><span class="notification-job">${escapeHtml(item.job || "No active job")}</span><span class="notification-preview">${escapeHtml(item.message || "Open for details")}</span></span>
+        </button>
+        <button class="notification-dismiss" data-notification-action="dismiss" aria-label="Dismiss notification">×</button>
+      </article>`).join("");
   }
 
   function noticeText(status, meta) {
@@ -806,6 +886,45 @@
   }
 
   function bindEvents() {
+    const notificationCenter = document.getElementById("notification-center");
+    const notificationButton = document.getElementById("notification-button");
+    notificationButton?.addEventListener("click", () => {
+      if (!notificationCenter) return;
+      notificationCenter.hidden = !notificationCenter.hidden;
+      notificationButton.classList.toggle("active", !notificationCenter.hidden);
+      notificationButton.setAttribute("aria-expanded", String(!notificationCenter.hidden));
+      renderNotificationCenter();
+    });
+    document.getElementById("notification-close")?.addEventListener("click", () => {
+      if (notificationCenter) notificationCenter.hidden = true;
+      notificationButton?.classList.remove("active");
+      notificationButton?.setAttribute("aria-expanded", "false");
+    });
+    document.getElementById("notification-clear-all")?.addEventListener("click", () => {
+      state.notifications = [];
+      persistNotifications();
+      renderNotificationCenter();
+    });
+    document.getElementById("notification-list")?.addEventListener("click", (event) => {
+      const itemElement = event.target.closest("[data-notification-id]");
+      const actionElement = event.target.closest("[data-notification-action]");
+      if (!itemElement || !actionElement) return;
+      const index = state.notifications.findIndex((item) => item.id === itemElement.dataset.notificationId);
+      if (index < 0) return;
+      if (actionElement.dataset.notificationAction === "dismiss") {
+        state.notifications.splice(index, 1);
+        persistNotifications();
+        renderNotificationCenter();
+        return;
+      }
+      const item = state.notifications[index];
+      item.read = true;
+      persistNotifications();
+      renderNotificationCenter();
+      if (notificationCenter) notificationCenter.hidden = true;
+      notificationButton?.classList.remove("active");
+      showStatusDetails(item.printerId, item.snapshot, item.kind);
+    });
     document.getElementById("fullscreen-button")?.addEventListener("click", requestFullscreen);
     document.getElementById("bambuddy-button")?.addEventListener("click", openBambuddy);
     document.getElementById("settings-button")?.addEventListener("click", () => {
@@ -902,6 +1021,7 @@
   shell();
   applyAppearance();
   bindEvents();
+  renderNotificationCenter();
   startClock();
   loadVersion();
   requestWakeLock();
