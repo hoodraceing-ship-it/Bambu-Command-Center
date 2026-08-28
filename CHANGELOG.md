@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.5.3
+
+- Removed the full-screen printer-attention popup so alerts never interrupt the camera wall.
+- Added an in-drawer alert detail view with Event Log back navigation, job facts, HMS details, and printer actions.
+- Kept Stop Print as the only blocking safety confirmation.
+
 ## 3.5.2
 
 - Added a shared 18-FPS camera budget in Balanced mode and a 12-FPS budget in Eco mode, divided across all visible printers.

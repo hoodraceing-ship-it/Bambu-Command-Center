@@ -146,7 +146,7 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--green); ou
   color: #fff; font-size: .57rem; font-weight: 850; font-variant-numeric: tabular-nums;
 }
 .notification-center {
-  position: fixed; z-index: 70; top: 72px; right: 12px; display: grid; width: min(440px,calc(100vw - 24px)); max-height: calc(100vh - 84px);
+  position: fixed; z-index: 70; top: 72px; right: 12px; display: grid; width: min(520px,calc(100vw - 24px)); max-height: calc(100vh - 84px);
   grid-template-rows: auto minmax(0,1fr); overflow: hidden; border: 1px solid var(--line-strong); border-radius: 18px;
   background: rgba(7,16,13,.985); box-shadow: 0 28px 80px rgba(0,0,0,.72),inset 0 1px rgba(255,255,255,.035);
 }
@@ -184,6 +184,13 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--green); ou
 .notification-empty svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }
 .notification-empty strong { color: var(--text); font-size: .82rem; }
 .notification-empty p { margin: 6px 0 0; color: var(--muted); font-size: .65rem; }
+.notification-detail { min-height: 0; padding: 16px 18px 18px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+.notification-detail[hidden] { display: none; }
+.notification-detail-back { min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255,255,255,.025); color: var(--green); font-size: .61rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; cursor: pointer; touch-action: manipulation; }
+.notification-detail-title { display: flex; align-items: center; gap: 9px; margin: 17px 0 16px; color: var(--text); font-size: .92rem; font-weight: 820; letter-spacing: -.01em; }
+.notification-detail-title svg { width: 19px; height: 19px; fill: none; stroke: var(--amber); stroke-width: 1.8; }
+.notification-detail-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.notification-detail-actions .modal-button { min-height: 42px; }
 
 @media (max-height: 900px) and (orientation: landscape) {
   .notification-center { top: 64px; max-height: calc(100vh - 72px); }
@@ -208,7 +215,6 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--green); ou
 .modal-button { min-width: 108px; min-height: 46px; padding: 0 16px; border: 1px solid var(--line-strong); border-radius: 12px; background: rgba(255,255,255,.04); color: #c6d7cf; font-size: .73rem; font-weight: 740; }
 .modal-button.primary { border-color: rgba(84,243,164,.3); background: var(--green-soft); color: var(--green); }
 .modal-button.danger { border-color: rgba(255,111,120,.32); background: rgba(255,111,120,.1); color: #ff9ba1; }
-.status-modal { width: min(520px,94vw); }
 .notice-heading { display: flex; align-items: center; gap: 12px; }
 .notice-printer { color: var(--text); font-size: 1rem; font-weight: 780; letter-spacing: -.02em; }
 .notice-state { margin-top: 3px; color: var(--muted); font-size: .65rem; font-weight: 780; letter-spacing: .1em; text-transform: uppercase; }
@@ -228,7 +234,7 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--green); ou
 @media (max-width: 560px) {
   .notice-facts { grid-template-columns: 1fr 1fr; }
   .notice-facts > div:first-child { grid-column: 1 / -1; }
-  .status-modal .modal-actions { flex-wrap: wrap; }
+  .notification-detail-actions { flex-wrap: wrap; }
   .notice-action-buttons { width: 100%; }
 }
 
@@ -655,12 +661,16 @@ html[data-theme="overdrive"] .notification-center-header { border-bottom-color: 
 html[data-theme="overdrive"] .notification-kicker { color: #ffc14c; letter-spacing: .2em; }
 html[data-theme="overdrive"] .notification-center h2 { font-family: ui-monospace,SFMono-Regular,Consolas,monospace; letter-spacing: .06em; text-transform: uppercase; text-shadow: 0 0 10px rgba(59,227,255,.3); }
 html[data-theme="overdrive"] .notification-clear,
-html[data-theme="overdrive"] .notification-close { border-radius: 0; clip-path: polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px); }
+html[data-theme="overdrive"] .notification-close,
+html[data-theme="overdrive"] .notification-detail-back { border-radius: 0; clip-path: polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px); }
 html[data-theme="overdrive"] .notification-item { border-bottom-color: rgba(65,224,253,.17); background: rgba(0,18,29,.5); }
 html[data-theme="overdrive"] .notification-item.unread { background: linear-gradient(90deg,rgba(0,205,250,.16),rgba(0,20,31,.58) 72%); }
 html[data-theme="overdrive"] .notification-item.unread::before { background: #50ecff; box-shadow: 0 0 12px #2ce0ff; }
 html[data-theme="overdrive"] .notification-item-top strong { font-family: ui-monospace,SFMono-Regular,Consolas,monospace; letter-spacing: .04em; text-transform: uppercase; }
 html[data-theme="overdrive"] .notification-printer { color: #ffc452; }
+html[data-theme="overdrive"] .notification-detail { background: linear-gradient(135deg,rgba(0,30,45,.36),transparent 62%); }
+html[data-theme="overdrive"] .notification-detail-title { color: #e2faff; font-family: ui-monospace,SFMono-Regular,Consolas,monospace; letter-spacing: .06em; text-transform: uppercase; text-shadow: 0 0 10px rgba(59,227,255,.28); }
+html[data-theme="overdrive"] .notification-detail-actions { border-top-color: rgba(65,224,253,.2); }
 html[data-theme="overdrive"] .notification-button.has-notifications { border-color: rgba(255,190,65,.65); color: #ffc453; box-shadow: inset 0 0 18px rgba(255,183,45,.12),0 0 17px rgba(255,180,44,.13); }
 html[data-theme="overdrive"] .notification-badge { border-radius: 2px; border-color: #00111c; background: #ff4568; box-shadow: 0 0 12px #ff3159; }
 

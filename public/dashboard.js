@@ -55,7 +55,7 @@
     layout: localStorage.getItem("bcc-layout") || "grid",
     performance: localStorage.getItem("bcc-performance") || (/Silk|Kindle|KF[A-Z0-9]+|Fire/i.test(navigator.userAgent) ? "balanced" : "full"),
     focusedPrinter: null,
-    version: "3.5.2",
+    version: "3.5.3",
     previousStatuses: new Map(),
     activeAlertPrinter: null,
     notifications: (() => {
@@ -130,6 +130,19 @@
           </div>
           <div class="notification-list" id="notification-list"></div>
           <div class="notification-empty" id="notification-empty"><span>${icons.bell}</span><strong>All systems nominal</strong><p>Printer alerts and completed jobs will collect here.</p></div>
+          <section class="notification-detail" id="notification-detail" hidden aria-label="Notification details">
+            <button class="notification-detail-back" id="notification-detail-back">← Event log</button>
+            <div class="notification-detail-title">${icons.warning}<span id="notification-detail-title">Printer notification</span></div>
+            <div class="notice-heading"><span class="printer-status-dot" id="notice-dot"></span><div><div class="notice-printer" id="notice-printer"></div><div class="notice-state" id="notice-state"></div></div></div>
+            <div class="notice-message" id="notice-message"></div>
+            <div class="notice-facts">
+              <div><span>Job</span><strong id="notice-job">—</strong></div>
+              <div><span>Progress</span><strong id="notice-progress">—</strong></div>
+              <div><span>Estimated finish</span><strong id="notice-finish">—</strong></div>
+            </div>
+            <div class="notice-errors" id="notice-errors" hidden></div>
+            <div class="notification-detail-actions"><span class="notice-action-buttons" id="notice-action-buttons"></span><button class="modal-button primary" id="status-open-bambuddy">Open Bambuddy</button></div>
+          </section>
         </aside>
         <section class="dashboard" id="dashboard">
           <div class="loading-screen">
@@ -152,29 +165,6 @@
           <div class="modal-actions">
             <button class="modal-button" data-close-modal="confirm-modal">Keep Printing</button>
             <button class="modal-button danger" id="confirm-stop">Stop Print</button>
-          </div>
-        </div>
-      </div>
-      <div class="modal-backdrop" id="status-modal" hidden>
-        <div class="modal status-modal" role="dialog" aria-modal="true" aria-labelledby="status-title">
-          <div class="modal-header">
-            <div class="modal-title" id="status-title">${icons.warning}<span>Printer notification</span></div>
-            <button class="icon-button" data-close-modal="status-modal" aria-label="Close">×</button>
-          </div>
-          <div class="modal-content">
-            <div class="notice-heading"><span class="printer-status-dot" id="notice-dot"></span><div><div class="notice-printer" id="notice-printer"></div><div class="notice-state" id="notice-state"></div></div></div>
-            <div class="notice-message" id="notice-message"></div>
-            <div class="notice-facts">
-              <div><span>Job</span><strong id="notice-job">—</strong></div>
-              <div><span>Progress</span><strong id="notice-progress">—</strong></div>
-              <div><span>Estimated finish</span><strong id="notice-finish">—</strong></div>
-            </div>
-            <div class="notice-errors" id="notice-errors" hidden></div>
-          </div>
-          <div class="modal-actions">
-            <span class="notice-action-buttons" id="notice-action-buttons"></span>
-            <button class="modal-button" data-close-modal="status-modal">Close</button>
-            <button class="modal-button primary" id="status-open-bambuddy">Open Bambuddy</button>
           </div>
         </div>
       </div>
@@ -643,7 +633,7 @@
         timeout: 12000,
       });
       toast(result?.message || successMessage || "Command sent");
-      closeModal("status-modal");
+      closeNotificationCenter();
       setTimeout(pollStatuses, 650);
     } catch (error) {
       toast(error?.message || "The command failed", true);
@@ -658,9 +648,6 @@
   function closeModal(id) {
     const modal = document.getElementById(id);
     if (modal) modal.hidden = true;
-    if (id === "status-modal") {
-      state.activeAlertPrinter = null;
-    }
     if (!blockingOverlayOpen()) resumeCameras();
   }
 
@@ -799,6 +786,7 @@
   function renderNotificationCenter() {
     const list = document.getElementById("notification-list");
     const empty = document.getElementById("notification-empty");
+    const detail = document.getElementById("notification-detail");
     const badge = document.getElementById("notification-badge");
     const button = document.getElementById("notification-button");
     const clear = document.getElementById("notification-clear-all");
@@ -810,8 +798,9 @@
     button?.classList.toggle("has-notifications", unread > 0);
     if (clear) clear.disabled = state.notifications.length === 0;
     if (!list || !empty) return;
-    empty.hidden = state.notifications.length > 0;
-    list.hidden = state.notifications.length === 0;
+    const showingDetail = Boolean(detail && !detail.hidden);
+    empty.hidden = showingDetail || state.notifications.length > 0;
+    list.hidden = showingDetail || state.notifications.length === 0;
     list.innerHTML = state.notifications.map((item) => `
       <article class="notification-item${item.read ? "" : " unread"}" data-notification-id="${escapeHtml(item.id)}">
         <button class="notification-open" data-notification-action="open">
@@ -820,6 +809,34 @@
         </button>
         <button class="notification-dismiss" data-notification-action="dismiss" aria-label="Dismiss notification">×</button>
       </article>`).join("");
+  }
+
+  function openNotificationCenter() {
+    const center = document.getElementById("notification-center");
+    const button = document.getElementById("notification-button");
+    if (!center) return;
+    center.hidden = false;
+    button?.classList.add("active");
+    button?.setAttribute("aria-expanded", "true");
+    if (state.performance !== "full") suspendCameras();
+    renderNotificationCenter();
+  }
+
+  function showNotificationList() {
+    const detail = document.getElementById("notification-detail");
+    if (detail) detail.hidden = true;
+    state.activeAlertPrinter = null;
+    renderNotificationCenter();
+  }
+
+  function closeNotificationCenter() {
+    const center = document.getElementById("notification-center");
+    const button = document.getElementById("notification-button");
+    if (center) center.hidden = true;
+    button?.classList.remove("active");
+    button?.setAttribute("aria-expanded", "false");
+    showNotificationList();
+    if (!blockingOverlayOpen()) resumeCameras();
   }
 
   function noticeText(status, meta) {
@@ -881,15 +898,15 @@
       });
     });
     actions.querySelector("[data-command='clear-hms']")?.addEventListener("click", () => {
-      closeModal("status-modal");
+      closeNotificationCenter();
       command(printerId, "/hms/clear", "Printer alert cleared");
     });
     actions.querySelector("[data-notice-command='clear-plate']")?.addEventListener("click", () => {
-      closeModal("status-modal");
+      closeNotificationCenter();
       command(printerId, "/clear-plate", "Plate marked clear");
     });
     actions.querySelector("[data-notice-command='resume']")?.addEventListener("click", () => {
-      closeModal("status-modal");
+      closeNotificationCenter();
       command(printerId, "/print/resume", "Resume command sent");
     });
   }
@@ -900,7 +917,7 @@
     const status = suppliedStatus || state.statuses.get(Number(printerId)) || {};
     const meta = statusMeta(status);
     const progress = Math.max(0, Math.min(100, Number(status.progress) || 0));
-    const title = document.querySelector("#status-title span");
+    const title = document.getElementById("notification-detail-title");
     const titleByKind = {
       hms: "Printer needs attention", plate: "Print finished — clear the plate",
       failed: "Print failed", finish: "Print finished", pause: "Print paused",
@@ -915,7 +932,9 @@
     renderNoticeErrors(printerId, status);
     const dot = document.getElementById("notice-dot");
     if (dot) dot.classList.toggle("offline", meta.tone === "red" || !status.connected);
-    showModal("status-modal");
+    const detail = document.getElementById("notification-detail");
+    if (detail) detail.hidden = false;
+    openNotificationCenter();
   }
 
   function askStop(printerId) {
@@ -949,22 +968,17 @@
     const notificationButton = document.getElementById("notification-button");
     notificationButton?.addEventListener("click", () => {
       if (!notificationCenter) return;
-      notificationCenter.hidden = !notificationCenter.hidden;
-      notificationButton.classList.toggle("active", !notificationCenter.hidden);
-      notificationButton.setAttribute("aria-expanded", String(!notificationCenter.hidden));
-      if (!notificationCenter.hidden && state.performance !== "full") suspendCameras();
-      else resumeCameras();
-      renderNotificationCenter();
+      if (notificationCenter.hidden) {
+        showNotificationList();
+        openNotificationCenter();
+      } else closeNotificationCenter();
     });
-    document.getElementById("notification-close")?.addEventListener("click", () => {
-      if (notificationCenter) notificationCenter.hidden = true;
-      notificationButton?.classList.remove("active");
-      notificationButton?.setAttribute("aria-expanded", "false");
-      resumeCameras();
-    });
+    document.getElementById("notification-close")?.addEventListener("click", closeNotificationCenter);
+    document.getElementById("notification-detail-back")?.addEventListener("click", showNotificationList);
     document.getElementById("notification-clear-all")?.addEventListener("click", () => {
       state.notifications = [];
       persistNotifications();
+      showNotificationList();
       renderNotificationCenter();
     });
     document.getElementById("notification-list")?.addEventListener("click", (event) => {
@@ -983,8 +997,6 @@
       item.read = true;
       persistNotifications();
       renderNotificationCenter();
-      if (notificationCenter) notificationCenter.hidden = true;
-      notificationButton?.classList.remove("active");
       showStatusDetails(item.printerId, item.snapshot, item.kind);
     });
     document.getElementById("fullscreen-button")?.addEventListener("click", requestFullscreen);
