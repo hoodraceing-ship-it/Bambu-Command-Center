@@ -718,10 +718,10 @@ html[data-theme="arc"][data-performance="balanced"] body::after,
 html[data-theme="arc"][data-performance="balanced"] .brand-mark::before,
 html[data-theme="arc"][data-performance="balanced"] .brand-mark::after,
 html[data-theme="arc"][data-performance="balanced"] .progress-fill::after { animation: none; }
-html[data-theme="overdrive"][data-performance="balanced"] .overdrive-scan { animation-duration: 12s; will-change: transform; }
+html[data-theme="overdrive"][data-performance="balanced"] .overdrive-scan { display: none; }
 html[data-theme="overdrive"][data-performance="balanced"] .camera-feed { filter: none; }
 html[data-theme="overdrive"][data-performance="balanced"] .printer-card { box-shadow: 0 12px 30px rgba(0,4,13,.58),inset 0 0 24px rgba(0,187,234,.018); }
-html[data-theme="overdrive"][data-performance="balanced"] .overdrive-reactor { opacity: .38; }
+html[data-theme="overdrive"][data-performance="balanced"] .overdrive-reactor { display: none; }
 
 html[data-performance="eco"] *,
 html[data-performance="eco"] *::before,
@@ -865,6 +865,25 @@ html[data-theme="overdrive"][data-performance="balanced"] .camera-target-frame {
 html[data-theme="overdrive"][data-performance="balanced"] .printer-card { box-shadow: 0 0 0 1px rgba(53,225,255,.12),0 12px 30px rgba(0,4,13,.64),inset 0 0 24px rgba(0,187,234,.03); }
 html[data-theme="overdrive"][data-performance="balanced"] .dashboard::before,
 html[data-theme="overdrive"][data-performance="balanced"] .dashboard::after { box-shadow: none; }
+html[data-theme="overdrive"][data-performance="balanced"] .overdrive-backdrop,
+html[data-theme="overdrive"][data-performance="balanced"] .overdrive-reticle { display: none; }
+html[data-theme="overdrive"][data-performance="balanced"] body::before { opacity: .38; }
+html[data-theme="overdrive"][data-performance="balanced"] .camera-feed,
+html[data-theme="overdrive"][data-performance="balanced"] .progress-fill { transition: none; }
+html[data-theme="overdrive"][data-performance="balanced"] .printer-card,
+html[data-theme="overdrive"][data-performance="balanced"] .printer-card:nth-child(even) {
+  box-shadow: 0 8px 22px rgba(0,3,11,.62),inset 0 0 18px rgba(0,187,234,.018);
+}
+html[data-theme="overdrive"][data-performance="balanced"] .metric,
+html[data-theme="overdrive"][data-performance="balanced"] .metric-icon,
+html[data-theme="overdrive"][data-performance="balanced"] .control-button,
+html[data-theme="overdrive"][data-performance="balanced"] .speed-button.active,
+html[data-theme="overdrive"][data-performance="balanced"] .state-pill,
+html[data-theme="overdrive"][data-performance="balanced"] .job-row,
+html[data-theme="overdrive"][data-performance="balanced"] .card-power-rail,
+html[data-theme="overdrive"][data-performance="balanced"] .printer-status-dot,
+html[data-theme="overdrive"][data-performance="balanced"] .camera-progress { box-shadow: none; text-shadow: none; }
+html[data-theme="overdrive"][data-performance="balanced"] .progress-fill { box-shadow: 0 0 5px rgba(35,218,255,.5); }
 
 html[data-layout="wall"] .printer-grid {
   grid-template-columns: repeat(var(--printer-count),minmax(300px,1fr));

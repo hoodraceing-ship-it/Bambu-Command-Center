@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.5.2
+
+- Added a shared 18-FPS camera budget in Balanced mode and a 12-FPS budget in Eco mode, divided across all visible printers.
+- Eliminated repeated DOM writes for unchanged status, progress, temperatures, controls, and icons.
+- Stopped rebuilding filament/AMS markup unless the actual spool data changes.
+- Raised Balanced polling to a five-second minimum and Eco polling to eight seconds.
+- Suspends camera streams while the app is hidden or a notification/settings dialog covers the dashboard, then reconnects them automatically.
+- Removed full-screen reactor/scan compositing and expensive shadows from Balanced mode while preserving the static Mark V frame design.
+
 ## 3.5.1
 
 - Added a one-time display migration for tablets that retained the older JARVIS HUD and Camera Wall settings after the Mark V release.

@@ -55,7 +55,7 @@
     layout: localStorage.getItem("bcc-layout") || "grid",
     performance: localStorage.getItem("bcc-performance") || (/Silk|Kindle|KF[A-Z0-9]+|Fire/i.test(navigator.userAgent) ? "balanced" : "full"),
     focusedPrinter: null,
-    version: "3.5.1",
+    version: "3.5.2",
     previousStatuses: new Map(),
     activeAlertPrinter: null,
     notifications: (() => {
@@ -198,7 +198,7 @@
               </select>
             </div>
             <div class="setting-row">
-              <div><div class="setting-label">Camera frame rate</div><div class="setting-help">HD external cameras stabilize at 15 FPS; native cameras use your selected maximum.</div></div>
+              <div><div class="setting-label">Camera frame rate</div><div class="setting-help">Balanced shares an 18 FPS budget across all visible cameras to keep Fire tablets smooth.</div></div>
               <select class="setting-select" id="camera-fps">
                 <option value="4">4 FPS</option><option value="8">8 FPS</option><option value="12">12 FPS</option><option value="15">15 FPS</option><option value="24">24 FPS</option><option value="30">30 FPS</option>
               </select>
@@ -206,7 +206,7 @@
             <div class="setting-row">
               <div><div class="setting-label">Performance</div><div class="setting-help">Balanced is optimized for Fire tablets while preserving the full HUD design.</div></div>
               <select class="setting-select" id="performance-mode">
-                <option value="balanced">Balanced — Fire tablet</option><option value="full">Full effects</option><option value="eco">Eco — maximum smoothness</option>
+                <option value="balanced">Balanced — Fire tablet optimized</option><option value="full">Full effects</option><option value="eco">Eco — maximum smoothness</option>
               </select>
             </div>
             <div class="setting-row">
@@ -383,6 +383,8 @@
       pauseButton: card.querySelector('[data-command="pause-resume"]'), lightButton: card.querySelector('[data-command="light"]'),
       stopButton: card.querySelector('[data-command="stop"]'), refreshButton: card.querySelector('[data-command="refresh"]'),
       refreshIcon: get("refresh-icon"), refreshLabel: get("refresh-label"), speedButtons: Array.from(card.querySelectorAll('[data-command="speed"]')),
+      pauseIcon: card.querySelector('[data-command="pause-resume"] .button-icon'),
+      amsSignature: null, pauseIconState: null, refreshIconState: null,
     });
   }
 
@@ -392,27 +394,52 @@
     const printer = state.printers.find((item) => Number(item.id) === Number(id));
     const hasExternalCamera = Boolean(printer?.external_camera_url);
     const lowFpsCamera = !hasExternalCamera && /(?:A1|P1)/i.test(`${printer?.name || ""} ${printer?.model || ""}`);
-    // Bambuddy converts external RTSP sources to MJPEG. Requesting more frames
-    // than the Wyze source can provide creates duplicate work and buffer growth,
-    // especially in Fire OS browsers. Fifteen FPS keeps HD responsive while
-    // native P2S/X-series streams may still use the selected higher ceiling.
-    const performanceCap = state.performance === "eco" ? 8 : state.performance === "balanced" ? 12 : 30;
+    // MJPEG decoding is the dominant Fire-tablet cost. Balanced and Eco share
+    // a total frame budget across every visible printer instead of allowing
+    // each stream to consume the full selected rate independently.
+    const cameraCount = Math.max(1, state.printers.length);
+    const performanceCap = state.performance === "eco"
+      ? Math.max(3, Math.floor(12 / cameraCount))
+      : state.performance === "balanced" ? Math.max(5, Math.floor(18 / cameraCount)) : 30;
     const cameraFps = lowFpsCamera
       ? Math.min(state.cameraFps, 5)
-      : hasExternalCamera ? Math.min(state.cameraFps, performanceCap, 15) : Math.min(state.cameraFps, performanceCap);
+      : hasExternalCamera ? Math.min(state.cameraFps, performanceCap, 12) : Math.min(state.cameraFps, performanceCap);
     const src = `${config.apiBase}/printers/${id}/camera/stream?fps=${cameraFps}`;
     refs.camera.classList.add("is-loading");
     refs.camera.classList.remove("has-error");
     refs.camera.onload = () => refs.camera.classList.remove("is-loading", "has-error");
     refs.camera.onerror = () => {
+      if (refs.camera.dataset.suspended === "1") return;
       refs.camera.classList.add("has-error");
       const placeholder = refs.root.querySelector(".camera-placeholder");
       if (placeholder) placeholder.innerHTML = 'Camera unavailable<span>Retrying automatically</span>';
       setTimeout(() => {
-        if (document.body.contains(refs.camera)) refs.camera.src = `${src}&retry=${Date.now()}`;
+        if (document.body.contains(refs.camera) && refs.camera.dataset.suspended !== "1") refs.camera.src = `${src}&retry=${Date.now()}`;
       }, 10000);
     };
     refs.camera.src = src;
+  }
+
+  function suspendCameras() {
+    for (const refs of state.cards.values()) {
+      refs.camera.dataset.suspended = "1";
+      refs.camera.removeAttribute("src");
+    }
+  }
+
+  function resumeCameras() {
+    if (document.visibilityState === "hidden" || blockingOverlayOpen()) return;
+    state.printers.forEach((printer) => {
+      const refs = state.cards.get(Number(printer.id));
+      if (!refs || refs.camera.dataset.suspended !== "1") return;
+      delete refs.camera.dataset.suspended;
+      attachCamera(Number(printer.id));
+    });
+  }
+
+  function blockingOverlayOpen() {
+    const center = document.getElementById("notification-center");
+    return Boolean(document.querySelector(".modal-backdrop:not([hidden])")) || Boolean(center && !center.hidden);
   }
 
   function renderPrinters(printers) {
@@ -454,6 +481,16 @@
     document.getElementById("open-bambuddy-empty")?.addEventListener("click", openBambuddy);
   }
 
+  function setText(node, value) {
+    if (!node) return;
+    const next = String(value);
+    if (node.textContent !== next) node.textContent = next;
+  }
+
+  function setDisabled(node, value) {
+    if (node && node.disabled !== Boolean(value)) node.disabled = Boolean(value);
+  }
+
   function updateCard(printer, status) {
     const refs = state.cards.get(Number(printer.id));
     if (!refs || !status) return;
@@ -464,35 +501,49 @@
     const printing = activeState(currentState);
 
     refs.statusDot.classList.toggle("offline", !status.connected);
-    refs.statePill.textContent = meta.label;
-    refs.statePill.dataset.tone = meta.tone;
-    refs.cameraState.textContent = meta.label;
-    refs.cameraProgress.textContent = printing ? `${Math.round(progress)}%` : meta.label;
-    refs.jobName.textContent = cleanJobName(status);
-    refs.jobProgress.textContent = `${Math.round(progress)}%`;
-    refs.progressFill.style.width = `${progress}%`;
-    refs.time.textContent = formatTime(status.remaining_time);
+    setText(refs.statePill, meta.label);
+    if (refs.statePill.dataset.tone !== meta.tone) refs.statePill.dataset.tone = meta.tone;
+    setText(refs.cameraState, meta.label);
+    setText(refs.cameraProgress, printing ? `${Math.round(progress)}%` : meta.label);
+    setText(refs.jobName, cleanJobName(status));
+    setText(refs.jobProgress, `${Math.round(progress)}%`);
+    const progressWidth = `${progress}%`;
+    if (refs.progressFill.style.width !== progressWidth) refs.progressFill.style.width = progressWidth;
+    setText(refs.time, formatTime(status.remaining_time));
     const eta = printing ? finishTime(status.remaining_time) : "—";
-    refs.finishTime.textContent = eta === "—" ? "Remaining" : `Finishes ${eta}`;
-    refs.layers.textContent = Number(status.total_layers) > 0 ? `${status.layer_num || 0} / ${status.total_layers}` : "—";
-    refs.nozzle.textContent = formatTemp(status.temperatures?.nozzle, status.temperatures?.nozzle_target);
-    refs.bed.textContent = formatTemp(status.temperatures?.bed, status.temperatures?.bed_target);
-    refs.pauseLabel.textContent = paused ? "Resume" : "Pause";
-    refs.pauseButton.querySelector(".button-icon").innerHTML = paused ? icons.play : icons.pause;
-    refs.pauseButton.disabled = !status.connected || (!paused && currentState !== "RUNNING");
-    refs.stopButton.disabled = !status.connected || !printing;
+    setText(refs.finishTime, eta === "—" ? "Remaining" : `Finishes ${eta}`);
+    setText(refs.layers, Number(status.total_layers) > 0 ? `${status.layer_num || 0} / ${status.total_layers}` : "—");
+    setText(refs.nozzle, formatTemp(status.temperatures?.nozzle, status.temperatures?.nozzle_target));
+    setText(refs.bed, formatTemp(status.temperatures?.bed, status.temperatures?.bed_target));
+    setText(refs.pauseLabel, paused ? "Resume" : "Pause");
+    const pauseIconState = paused ? "play" : "pause";
+    if (refs.pauseIconState !== pauseIconState) {
+      refs.pauseIcon.innerHTML = paused ? icons.play : icons.pause;
+      refs.pauseIconState = pauseIconState;
+    }
+    setDisabled(refs.pauseButton, !status.connected || (!paused && currentState !== "RUNNING"));
+    setDisabled(refs.stopButton, !status.connected || !printing);
     refs.lightButton.classList.toggle("active", Boolean(status.chamber_light));
     const needsPlateClear = plateClearNeeded(status);
-    refs.refreshButton.dataset.command = needsPlateClear ? "clear-plate" : "refresh";
+    const refreshCommand = needsPlateClear ? "clear-plate" : "refresh";
+    if (refs.refreshButton.dataset.command !== refreshCommand) refs.refreshButton.dataset.command = refreshCommand;
     refs.refreshButton.classList.toggle("active", needsPlateClear);
-    refs.refreshIcon.innerHTML = needsPlateClear ? icons.layers : icons.refresh;
-    refs.refreshLabel.textContent = needsPlateClear ? "Plate Clear" : "Refresh";
+    if (refs.refreshIconState !== refreshCommand) {
+      refs.refreshIcon.innerHTML = needsPlateClear ? icons.layers : icons.refresh;
+      refs.refreshIconState = refreshCommand;
+    }
+    setText(refs.refreshLabel, needsPlateClear ? "Plate Clear" : "Refresh");
     refs.speedButtons.forEach((button) => {
-      button.disabled = !status.connected || !printing;
+      setDisabled(button, !status.connected || !printing);
       button.classList.toggle("active", Number(button.dataset.value) === Number(status.speed_level));
     });
 
     const trays = spoolData(status);
+    const amsSignature = trays.length
+      ? trays.map((tray) => `${tray.tray_type || tray.tray_id_name || "Empty"}:${normalizeColor(tray.tray_color)}`).join("|")
+      : "external";
+    if (refs.amsSignature === amsSignature) return;
+    refs.amsSignature = amsSignature;
     if (trays.length) {
       refs.ams.innerHTML = `<span class="ams-label">Filament</span>${trays.map((tray) => {
         const label = tray.tray_type || tray.tray_id_name || "Empty";
@@ -509,7 +560,7 @@
     const printing = statuses.filter((item) => activeState(item.state)).length;
     const summary = document.getElementById("system-summary-text");
     const dot = document.getElementById("system-dot");
-    if (summary) summary.textContent = `${online} online · ${printing} active · ${state.printers.length} total`;
+    setText(summary, `${online} online · ${printing} active · ${state.printers.length} total`);
     if (dot) dot.classList.toggle("offline", !state.connected || online === 0);
   }
 
@@ -536,7 +587,10 @@
 
   function schedulePolling() {
     clearInterval(state.pollTimer);
-    state.pollTimer = setInterval(pollStatuses, state.pollSeconds * 1000);
+    const effectiveSeconds = state.performance === "eco"
+      ? Math.max(8, state.pollSeconds)
+      : state.performance === "balanced" ? Math.max(5, state.pollSeconds) : state.pollSeconds;
+    state.pollTimer = setInterval(pollStatuses, effectiveSeconds * 1000);
   }
 
   async function discover() {
@@ -596,13 +650,18 @@
     }
   }
 
-  function showModal(id) { const modal = document.getElementById(id); if (modal) modal.hidden = false; }
+  function showModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.hidden = false;
+    if (state.performance !== "full") suspendCameras();
+  }
   function closeModal(id) {
     const modal = document.getElementById(id);
     if (modal) modal.hidden = true;
     if (id === "status-modal") {
       state.activeAlertPrinter = null;
     }
+    if (!blockingOverlayOpen()) resumeCameras();
   }
 
   const commonHmsMessages = {
@@ -893,12 +952,15 @@
       notificationCenter.hidden = !notificationCenter.hidden;
       notificationButton.classList.toggle("active", !notificationCenter.hidden);
       notificationButton.setAttribute("aria-expanded", String(!notificationCenter.hidden));
+      if (!notificationCenter.hidden && state.performance !== "full") suspendCameras();
+      else resumeCameras();
       renderNotificationCenter();
     });
     document.getElementById("notification-close")?.addEventListener("click", () => {
       if (notificationCenter) notificationCenter.hidden = true;
       notificationButton?.classList.remove("active");
       notificationButton?.setAttribute("aria-expanded", "false");
+      resumeCameras();
     });
     document.getElementById("notification-clear-all")?.addEventListener("click", () => {
       state.notifications = [];
@@ -956,7 +1018,7 @@
       applyAppearance();
       applyFocus();
       schedulePolling();
-      if (cameraChanged) state.printers.forEach((printer) => attachCamera(Number(printer.id)));
+      if (cameraChanged) suspendCameras();
       closeModal("settings-modal");
       toast("Display settings saved");
     });
@@ -994,7 +1056,8 @@
       }
     });
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") { requestWakeLock(); pollStatuses(); }
+      if (document.visibilityState === "hidden") suspendCameras();
+      else { requestWakeLock(); resumeCameras(); pollStatuses(); }
     });
   }
 
