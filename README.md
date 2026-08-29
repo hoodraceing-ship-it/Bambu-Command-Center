@@ -89,8 +89,31 @@ Static assets live in `public/`; the credential-hiding proxy and web server live
 
 Set Fully Kiosk Browser's start URL to `http://<SERVER-IP>:8092`, enable launch on boot, keep-screen-on, and fullscreen browsing. Keep the tablet in landscape orientation. The dashboard also supports portrait mode and horizontal swiping.
 
+## Server Stream mode
+
+Server Stream mode is recommended for Fire tablets displaying multiple cameras. It uses [go2rtc](https://github.com/AlexxIT/go2rtc) to pass existing H.264 video to the tablet through WebRTC/MSE without software re-encoding. The browser can then use its hardware video decoder instead of decoding multiple high-bandwidth MJPEG feeds.
+
+After updating Command Center, run the private interactive setup on the Docker server:
+
+```bash
+chmod +x setup-server-stream.sh
+./setup-server-stream.sh
+```
+
+The script reads the existing Bambuddy printer list, offers each external RTSP camera automatically, and securely prompts for the LAN access code of P2S-class printers. Camera credentials are written only to the ignored local `go2rtc.yaml` file with owner-only permissions.
+
+Server Stream uses local TCP/UDP port `8555` for encrypted WebRTC media. Do not forward this port through the router. If the helper service or one direct camera is unavailable, Command Center automatically falls back to that printer's existing Bambuddy MJPEG feed.
+
+To disable it later, change `THIN_CLIENT=true` to `THIN_CLIENT=false` in `.env`, then run:
+
+```bash
+docker compose up -d --force-recreate bambu-command-center
+```
+
 ## License
 
 MIT
 
 Bambu Lab and the Bambu Lab logo are trademarks of their respective owner. This community dashboard is not affiliated with or endorsed by Bambu Lab.
+
+The bundled browser player is derived from go2rtc and remains covered by its MIT license; see `THIRD_PARTY_NOTICES.md`.

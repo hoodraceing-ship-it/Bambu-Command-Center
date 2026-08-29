@@ -71,6 +71,8 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--green); ou
 }
 .camera-frame::after { position: absolute; z-index: 2; inset: 0; background: linear-gradient(180deg,rgba(0,0,0,.42),transparent 28%,transparent 65%,rgba(0,0,0,.72)); content: ""; pointer-events: none; }
 .camera-feed { position: relative; z-index: 1; display: block; width: 100%; height: 100%; object-fit: contain; transition: opacity 240ms ease; }
+.camera-feed[hidden] { display: none; }
+.direct-camera > video { width: 100%; height: 100%; object-fit: contain; background: #000; }
 .camera-feed.is-loading, .camera-feed.has-error { opacity: .1; }
 .camera-placeholder { position: absolute; z-index: 1; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #7f988d; font-size: .8rem; font-weight: 700; letter-spacing: .02em; text-align: center; }
 .camera-placeholder::before { width: 42px; height: 42px; margin-bottom: 13px; border: 1px solid rgba(84,243,164,.17); border-radius: 50%; background: radial-gradient(circle,rgba(84,243,164,.12),transparent 65%); box-shadow: 0 0 30px rgba(34,217,131,.06); content: ""; }
@@ -211,6 +213,7 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--green); ou
 .setting-label { color: #dbe9e2; font-size: .78rem; font-weight: 700; }
 .setting-help { margin-top: 4px; color: #71887d; font-size: .64rem; }
 .setting-select { min-width: 116px; height: 41px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 11px; background: #12221d; color: var(--text); }
+.setting-value { flex: 0 0 auto; color: var(--green); font-size: .7rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 9px; padding: 14px 19px 19px; }
 .modal-button { min-width: 108px; min-height: 46px; padding: 0 16px; border: 1px solid var(--line-strong); border-radius: 12px; background: rgba(255,255,255,.04); color: #c6d7cf; font-size: .73rem; font-weight: 740; }
 .modal-button.primary { border-color: rgba(84,243,164,.3); background: var(--green-soft); color: var(--green); }

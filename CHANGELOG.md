@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.6.0
+
+- Added optional Server Stream mode using direct H.264 through go2rtc so Fire tablets can use hardware video decoding instead of processing three MJPEG feeds.
+- Added a private interactive setup script that discovers Bambuddy printers, securely prompts for LAN camera credentials, and keeps them out of GitHub.
+- Added automatic per-camera fallback to the existing Bambuddy MJPEG stream when go2rtc is unavailable or a direct stream does not become playable.
+- Proxies go2rtc signaling through Command Center while exposing only the encrypted local WebRTC media port.
+- Added visibility-aware stream suspension and preserved all existing controls, notifications, themes, and layouts.
+
 ## 3.5.3
 
 - Removed the full-screen printer-attention popup so alerts never interrupt the camera wall.

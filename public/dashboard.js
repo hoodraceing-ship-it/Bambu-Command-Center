@@ -1,3 +1,5 @@
+import "./video-stream.js";
+
 (function () {
   "use strict";
 
@@ -7,6 +9,8 @@
       cameraFps: 8,
       pollSeconds: 3,
       bambuddyUrl: `${window.location.protocol}//${window.location.hostname}:8001`,
+      thinClient: false,
+      go2rtcUrl: "/go2rtc",
     },
     window.COMMAND_CENTER_CONFIG || {},
   );
@@ -55,7 +59,7 @@
     layout: localStorage.getItem("bcc-layout") || "grid",
     performance: localStorage.getItem("bcc-performance") || (/Silk|Kindle|KF[A-Z0-9]+|Fire/i.test(navigator.userAgent) ? "balanced" : "full"),
     focusedPrinter: null,
-    version: "3.5.3",
+    version: "3.6.0",
     previousStatuses: new Map(),
     activeAlertPrinter: null,
     notifications: (() => {
@@ -194,6 +198,10 @@
               </select>
             </div>
             <div class="setting-row">
+              <div><div class="setting-label">Video delivery</div><div class="setting-help">Server Stream uses H.264 hardware playback and automatically falls back to Bambuddy when unavailable.</div></div>
+              <span class="setting-value">${config.thinClient ? "Server Stream" : "Bambuddy MJPEG"}</span>
+            </div>
+            <div class="setting-row">
               <div><div class="setting-label">Performance</div><div class="setting-help">Balanced is optimized for Fire tablets while preserving the full HUD design.</div></div>
               <select class="setting-select" id="performance-mode">
                 <option value="balanced">Balanced — Fire tablet optimized</option><option value="full">Full effects</option><option value="eco">Eco — maximum smoothness</option>
@@ -314,7 +322,8 @@
       <article class="printer-card" data-printer-id="${id}">
         <div class="bay-identity" aria-hidden="true"><span>FAB BAY</span><strong>${String(id).padStart(2, "0")}</strong></div>
         <div class="camera-frame">
-          <div class="camera-placeholder">Connecting camera…<span>Live feed from Bambuddy</span></div>
+          <div class="camera-placeholder">Connecting camera…<span>${config.thinClient ? "Server Stream with automatic fallback" : "Live feed from Bambuddy"}</span></div>
+          <video-stream class="camera-feed direct-camera is-loading" data-role="direct-camera" hidden></video-stream>
           <img class="camera-feed is-loading" alt="Live camera for ${escapeHtml(printer.name)}" data-role="camera">
           <div class="camera-badges">
             <span class="camera-live"><span class="camera-live-dot"></span> Live</span>
@@ -367,34 +376,31 @@
   function cacheCard(card, id) {
     const get = (role) => card.querySelector(`[data-role="${role}"]`);
     state.cards.set(id, {
-      root: card, camera: get("camera"), cameraState: get("camera-state"), cameraProgress: get("camera-progress"),
+      root: card, camera: get("camera"), directCamera: get("direct-camera"), cameraState: get("camera-state"), cameraProgress: get("camera-progress"),
       statusDot: get("status-dot"), statePill: get("state-pill"), jobName: get("job-name"), jobProgress: get("job-progress"), progressFill: get("progress-fill"),
       time: get("time"), finishTime: get("finish-time"), layers: get("layers"), nozzle: get("nozzle"), bed: get("bed"), ams: get("ams"), pauseLabel: get("pause-label"),
       pauseButton: card.querySelector('[data-command="pause-resume"]'), lightButton: card.querySelector('[data-command="light"]'),
       stopButton: card.querySelector('[data-command="stop"]'), refreshButton: card.querySelector('[data-command="refresh"]'),
       refreshIcon: get("refresh-icon"), refreshLabel: get("refresh-label"), speedButtons: Array.from(card.querySelectorAll('[data-command="speed"]')),
       pauseIcon: card.querySelector('[data-command="pause-resume"] .button-icon'),
-      amsSignature: null, pauseIconState: null, refreshIconState: null,
+      amsSignature: null, pauseIconState: null, refreshIconState: null, directFallbackTimer: null, cameraGeneration: 0,
     });
   }
 
-  function attachCamera(id) {
-    const refs = state.cards.get(id);
-    if (!refs) return;
-    const printer = state.printers.find((item) => Number(item.id) === Number(id));
-    const hasExternalCamera = Boolean(printer?.external_camera_url);
-    const lowFpsCamera = !hasExternalCamera && /(?:A1|P1)/i.test(`${printer?.name || ""} ${printer?.model || ""}`);
-    // MJPEG decoding is the dominant Fire-tablet cost. Balanced and Eco share
-    // a total frame budget across every visible printer instead of allowing
-    // each stream to consume the full selected rate independently.
-    const cameraCount = Math.max(1, state.printers.length);
-    const performanceCap = state.performance === "eco"
-      ? Math.max(3, Math.floor(12 / cameraCount))
-      : state.performance === "balanced" ? Math.max(5, Math.floor(18 / cameraCount)) : 30;
-    const cameraFps = lowFpsCamera
-      ? Math.min(state.cameraFps, 5)
-      : hasExternalCamera ? Math.min(state.cameraFps, performanceCap, 12) : Math.min(state.cameraFps, performanceCap);
-    const src = `${config.apiBase}/printers/${id}/camera/stream?fps=${cameraFps}`;
+  function stopDirectCamera(refs) {
+    clearTimeout(refs.directFallbackTimer);
+    refs.directFallbackTimer = null;
+    const direct = refs.directCamera;
+    if (!direct) return;
+    if (direct.video && typeof direct.ondisconnect === "function") direct.ondisconnect();
+    direct.wsURL = "";
+    direct.hidden = true;
+    direct.classList.add("is-loading");
+  }
+
+  function attachMjpeg(id, refs, src) {
+    stopDirectCamera(refs);
+    refs.camera.hidden = false;
     refs.camera.classList.add("is-loading");
     refs.camera.classList.remove("has-error");
     refs.camera.onload = () => refs.camera.classList.remove("is-loading", "has-error");
@@ -410,10 +416,62 @@
     refs.camera.src = src;
   }
 
+  async function attachCamera(id) {
+    const refs = state.cards.get(id);
+    if (!refs) return;
+    const generation = ++refs.cameraGeneration;
+    const printer = state.printers.find((item) => Number(item.id) === Number(id));
+    const hasExternalCamera = Boolean(printer?.external_camera_url);
+    const lowFpsCamera = !hasExternalCamera && /(?:A1|P1)/i.test(`${printer?.name || ""} ${printer?.model || ""}`);
+    // MJPEG decoding is the dominant Fire-tablet cost. Balanced and Eco share
+    // a total frame budget across every visible printer instead of allowing
+    // each stream to consume the full selected rate independently.
+    const cameraCount = Math.max(1, state.printers.length);
+    const performanceCap = state.performance === "eco"
+      ? Math.max(3, Math.floor(12 / cameraCount))
+      : state.performance === "balanced" ? Math.max(5, Math.floor(18 / cameraCount)) : 30;
+    const cameraFps = lowFpsCamera
+      ? Math.min(state.cameraFps, 5)
+      : hasExternalCamera ? Math.min(state.cameraFps, performanceCap, 12) : Math.min(state.cameraFps, performanceCap);
+    const src = `${config.apiBase}/printers/${id}/camera/stream?fps=${cameraFps}`;
+    if (config.thinClient && refs.directCamera) {
+      try {
+        const response = await fetch(`/thin/health?stream=printer_${id}`, { cache: "no-store" });
+        const health = await response.json();
+        if (generation !== refs.cameraGeneration || refs.camera.dataset.suspended === "1") return;
+        if (health.available) {
+          stopDirectCamera(refs);
+          const direct = refs.directCamera;
+          refs.camera.removeAttribute("src");
+          refs.camera.hidden = true;
+          direct.hidden = false;
+          direct.mode = "webrtc,mse";
+          direct.media = "video";
+          direct.background = false;
+          direct.classList.add("is-loading");
+          direct.addEventListener("camera-ready", () => {
+            clearTimeout(refs.directFallbackTimer);
+            direct.classList.remove("is-loading", "has-error");
+          }, { once: true });
+          direct.src = `${config.go2rtcUrl}/api/ws?src=printer_${id}`;
+          refs.directFallbackTimer = setTimeout(() => {
+            if (refs.camera.dataset.suspended === "1" || generation !== refs.cameraGeneration) return;
+            const ready = direct.video && direct.video.readyState >= 2;
+            if (!ready) attachMjpeg(id, refs, src);
+          }, 12000);
+          return;
+        }
+      } catch { /* Fall through to Bambuddy MJPEG. */ }
+    }
+    if (generation === refs.cameraGeneration) attachMjpeg(id, refs, src);
+  }
+
   function suspendCameras() {
     for (const refs of state.cards.values()) {
+      refs.cameraGeneration += 1;
       refs.camera.dataset.suspended = "1";
       refs.camera.removeAttribute("src");
+      stopDirectCamera(refs);
     }
   }
 
