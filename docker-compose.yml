@@ -11,20 +11,6 @@ services:
       BAMBUDDY_URL: "${BAMBUDDY_URL:-http://127.0.0.1:8001}"
       BAMBUDDY_BROWSER_URL: "${BAMBUDDY_BROWSER_URL:-}"
       BAMBUDDY_API_KEY: "${BAMBUDDY_API_KEY:-}"
-      BAMBUDDY_CAMERA_TOKEN: "${BAMBUDDY_CAMERA_TOKEN:-}"
-      THIN_CLIENT: "${THIN_CLIENT:-false}"
-      GO2RTC_URL: "${GO2RTC_URL:-http://127.0.0.1:1984}"
-
-  go2rtc:
-    image: alexxit/go2rtc:1.9.14
-    container_name: command-center-streams
-    profiles: ["thin-client"]
-    restart: unless-stopped
-    network_mode: host
-    labels:
-      com.centurylinklabs.watchtower.enable: "true"
-    volumes:
-      - ./go2rtc.yaml:/config/go2rtc.yaml:ro
 
   command-center-updater:
     image: containrrr/watchtower:1.7.1

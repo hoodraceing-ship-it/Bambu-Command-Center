@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.7.0
+
+- Removed every live camera element and stopped all camera stream requests, decoding, retries, and WebSocket work on the tablet.
+- Replaced the camera areas with lightweight fabrication-status consoles showing large completion rings, printer state, ETA, and control-link status.
+- Removed camera-only layout and frame-rate settings plus the optional go2rtc sidecar from the default deployment.
+- Migrates saved Camera Wall and Focus layouts to the new equal-bay Command Grid automatically.
+
 ## 3.6.0
 
 - Added optional Server Stream mode using direct H.264 through go2rtc so Fire tablets can use hardware video decoding instead of processing three MJPEG feeds.

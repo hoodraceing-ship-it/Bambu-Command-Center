@@ -1,16 +1,11 @@
-import "./video-stream.js";
-
 (function () {
   "use strict";
 
   const config = Object.assign(
     {
       apiBase: "/bridge/api/v1",
-      cameraFps: 8,
       pollSeconds: 3,
       bambuddyUrl: `${window.location.protocol}//${window.location.hostname}:8001`,
-      thinClient: false,
-      go2rtcUrl: "/go2rtc",
     },
     window.COMMAND_CENTER_CONFIG || {},
   );
@@ -30,7 +25,6 @@ import "./video-stream.js";
     light: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 22h4"/><path d="M8.2 14.5A7 7 0 1 1 15.8 14.5c-.7.5-.8 1.2-.8 1.5H9c0-.3-.1-1-.8-1.5Z"/></svg>',
     refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7L20 14"/><path d="M20 7v4h-4"/></svg>',
     warning: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20L12 3Z"/><path d="M12 9v5M12 18h.01"/></svg>',
-    focus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/></svg>',
     bell: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>',
   };
 
@@ -52,14 +46,12 @@ import "./video-stream.js";
     cards: new Map(),
     pollTimer: null,
     pollSeconds: Number(localStorage.getItem("bcc-poll-seconds")) || Number(config.pollSeconds) || 3,
-    cameraFps: Number(localStorage.getItem("bcc-camera-fps")) || Number(config.cameraFps) || 8,
     wakeLock: null,
     connected: true,
     theme: localStorage.getItem("bcc-theme") || "bambu",
     layout: localStorage.getItem("bcc-layout") || "grid",
     performance: localStorage.getItem("bcc-performance") || (/Silk|Kindle|KF[A-Z0-9]+|Fire/i.test(navigator.userAgent) ? "balanced" : "full"),
-    focusedPrinter: null,
-    version: "3.6.0",
+    version: "3.7.0",
     previousStatuses: new Map(),
     activeAlertPrinter: null,
     notifications: (() => {
@@ -69,6 +61,12 @@ import "./video-stream.js";
       } catch { return []; }
     })(),
   };
+
+  // Camera-first layouts no longer apply to the camera-free console.
+  if (!["grid", "rail"].includes(state.layout)) {
+    state.layout = "grid";
+    localStorage.setItem("bcc-layout", "grid");
+  }
 
   const root = document.getElementById("dashboard-root");
   if (!root) return;
@@ -153,7 +151,7 @@ import "./video-stream.js";
             <div class="loading-card">
               <div class="loading-spinner"></div>
               <h2>Connecting to your printers</h2>
-              <p>Loading Bambuddy status and camera connections.</p>
+              <p>Loading printer status and controls.</p>
             </div>
           </div>
         </section>
@@ -188,18 +186,8 @@ import "./video-stream.js";
             <div class="setting-row">
               <div><div class="setting-label">Layout</div><div class="setting-help">Choose how multiple printers share the screen.</div></div>
               <select class="setting-select" id="display-layout">
-                <option value="grid">Command Grid — equal bays</option><option value="wall">Camera Wall — large feeds</option><option value="focus">Swipe Focus</option><option value="rail">Status Rail</option>
+                <option value="grid">Command Grid — equal bays</option><option value="rail">Status Rail — stacked printers</option>
               </select>
-            </div>
-            <div class="setting-row">
-              <div><div class="setting-label">Camera frame rate</div><div class="setting-help">Balanced shares an 18 FPS budget across all visible cameras to keep Fire tablets smooth.</div></div>
-              <select class="setting-select" id="camera-fps">
-                <option value="4">4 FPS</option><option value="8">8 FPS</option><option value="12">12 FPS</option><option value="15">15 FPS</option><option value="24">24 FPS</option><option value="30">30 FPS</option>
-              </select>
-            </div>
-            <div class="setting-row">
-              <div><div class="setting-label">Video delivery</div><div class="setting-help">Server Stream uses H.264 hardware playback and automatically falls back to Bambuddy when unavailable.</div></div>
-              <span class="setting-value">${config.thinClient ? "Server Stream" : "Bambuddy MJPEG"}</span>
             </div>
             <div class="setting-row">
               <div><div class="setting-label">Performance</div><div class="setting-help">Balanced is optimized for Fire tablets while preserving the full HUD design.</div></div>
@@ -321,19 +309,17 @@ import "./video-stream.js";
     return `
       <article class="printer-card" data-printer-id="${id}">
         <div class="bay-identity" aria-hidden="true"><span>FAB BAY</span><strong>${String(id).padStart(2, "0")}</strong></div>
-        <div class="camera-frame">
-          <div class="camera-placeholder">Connecting camera…<span>${config.thinClient ? "Server Stream with automatic fallback" : "Live feed from Bambuddy"}</span></div>
-          <video-stream class="camera-feed direct-camera is-loading" data-role="direct-camera" hidden></video-stream>
-          <img class="camera-feed is-loading" alt="Live camera for ${escapeHtml(printer.name)}" data-role="camera">
-          <div class="camera-badges">
-            <span class="camera-live"><span class="camera-live-dot"></span> Live</span>
-            <span class="camera-badge-actions"><span class="camera-state" data-role="camera-state">Connecting</span><button class="camera-focus" data-command="focus" aria-label="Focus ${escapeHtml(printer.name)}" title="Focus printer">${icons.focus}</button></span>
+        <div class="status-deck">
+          <div class="status-deck-grid" aria-hidden="true"></div>
+          <div class="status-orbit" data-role="progress-orbit" style="--progress:0%">
+            <div class="status-orbit-core"><strong data-role="hero-progress">—%</strong><span>Complete</span></div>
           </div>
-          <div class="camera-progress" data-role="camera-progress">—</div>
-          <div class="hud-unit">UNIT ${String(id).padStart(2, "0")} // OPTICAL FEED</div>
-          <div class="overdrive-reticle" aria-hidden="true"><i></i><b></b></div>
-          <div class="overdrive-camera-data" aria-hidden="true"><span>VISUAL LINK ${String(id).padStart(2, "0")}</span><span>TRACKING // ACTIVE</span></div>
-          <div class="camera-target-frame" aria-hidden="true"><i></i><b></b></div>
+          <div class="status-telemetry">
+            <span class="status-kicker">FABRICATION BAY ${String(id).padStart(2, "0")}</span>
+            <strong data-role="hero-state">Connecting</strong>
+            <span data-role="hero-eta">Synchronizing telemetry</span>
+          </div>
+          <div class="status-signal" data-role="status-signal"><i></i><span>CONTROL LINK</span><b data-role="control-link">CONNECTING</b></div>
         </div>
         <div class="card-content">
           <div class="card-power-rail" aria-hidden="true"><span></span><b></b><i></i></div>
@@ -376,118 +362,15 @@ import "./video-stream.js";
   function cacheCard(card, id) {
     const get = (role) => card.querySelector(`[data-role="${role}"]`);
     state.cards.set(id, {
-      root: card, camera: get("camera"), directCamera: get("direct-camera"), cameraState: get("camera-state"), cameraProgress: get("camera-progress"),
+      root: card, progressOrbit: get("progress-orbit"), heroProgress: get("hero-progress"), heroState: get("hero-state"), heroEta: get("hero-eta"), statusSignal: get("status-signal"), controlLink: get("control-link"),
       statusDot: get("status-dot"), statePill: get("state-pill"), jobName: get("job-name"), jobProgress: get("job-progress"), progressFill: get("progress-fill"),
       time: get("time"), finishTime: get("finish-time"), layers: get("layers"), nozzle: get("nozzle"), bed: get("bed"), ams: get("ams"), pauseLabel: get("pause-label"),
       pauseButton: card.querySelector('[data-command="pause-resume"]'), lightButton: card.querySelector('[data-command="light"]'),
       stopButton: card.querySelector('[data-command="stop"]'), refreshButton: card.querySelector('[data-command="refresh"]'),
       refreshIcon: get("refresh-icon"), refreshLabel: get("refresh-label"), speedButtons: Array.from(card.querySelectorAll('[data-command="speed"]')),
       pauseIcon: card.querySelector('[data-command="pause-resume"] .button-icon'),
-      amsSignature: null, pauseIconState: null, refreshIconState: null, directFallbackTimer: null, cameraGeneration: 0,
+      amsSignature: null, pauseIconState: null, refreshIconState: null,
     });
-  }
-
-  function stopDirectCamera(refs) {
-    clearTimeout(refs.directFallbackTimer);
-    refs.directFallbackTimer = null;
-    const direct = refs.directCamera;
-    if (!direct) return;
-    if (direct.video && typeof direct.ondisconnect === "function") direct.ondisconnect();
-    direct.wsURL = "";
-    direct.hidden = true;
-    direct.classList.add("is-loading");
-  }
-
-  function attachMjpeg(id, refs, src) {
-    stopDirectCamera(refs);
-    refs.camera.hidden = false;
-    refs.camera.classList.add("is-loading");
-    refs.camera.classList.remove("has-error");
-    refs.camera.onload = () => refs.camera.classList.remove("is-loading", "has-error");
-    refs.camera.onerror = () => {
-      if (refs.camera.dataset.suspended === "1") return;
-      refs.camera.classList.add("has-error");
-      const placeholder = refs.root.querySelector(".camera-placeholder");
-      if (placeholder) placeholder.innerHTML = 'Camera unavailable<span>Retrying automatically</span>';
-      setTimeout(() => {
-        if (document.body.contains(refs.camera) && refs.camera.dataset.suspended !== "1") refs.camera.src = `${src}&retry=${Date.now()}`;
-      }, 10000);
-    };
-    refs.camera.src = src;
-  }
-
-  async function attachCamera(id) {
-    const refs = state.cards.get(id);
-    if (!refs) return;
-    const generation = ++refs.cameraGeneration;
-    const printer = state.printers.find((item) => Number(item.id) === Number(id));
-    const hasExternalCamera = Boolean(printer?.external_camera_url);
-    const lowFpsCamera = !hasExternalCamera && /(?:A1|P1)/i.test(`${printer?.name || ""} ${printer?.model || ""}`);
-    // MJPEG decoding is the dominant Fire-tablet cost. Balanced and Eco share
-    // a total frame budget across every visible printer instead of allowing
-    // each stream to consume the full selected rate independently.
-    const cameraCount = Math.max(1, state.printers.length);
-    const performanceCap = state.performance === "eco"
-      ? Math.max(3, Math.floor(12 / cameraCount))
-      : state.performance === "balanced" ? Math.max(5, Math.floor(18 / cameraCount)) : 30;
-    const cameraFps = lowFpsCamera
-      ? Math.min(state.cameraFps, 5)
-      : hasExternalCamera ? Math.min(state.cameraFps, performanceCap, 12) : Math.min(state.cameraFps, performanceCap);
-    const src = `${config.apiBase}/printers/${id}/camera/stream?fps=${cameraFps}`;
-    if (config.thinClient && refs.directCamera) {
-      try {
-        const response = await fetch(`/thin/health?stream=printer_${id}`, { cache: "no-store" });
-        const health = await response.json();
-        if (generation !== refs.cameraGeneration || refs.camera.dataset.suspended === "1") return;
-        if (health.available) {
-          stopDirectCamera(refs);
-          const direct = refs.directCamera;
-          refs.camera.removeAttribute("src");
-          refs.camera.hidden = true;
-          direct.hidden = false;
-          direct.mode = "webrtc,mse";
-          direct.media = "video";
-          direct.background = false;
-          direct.classList.add("is-loading");
-          direct.addEventListener("camera-ready", () => {
-            clearTimeout(refs.directFallbackTimer);
-            direct.classList.remove("is-loading", "has-error");
-          }, { once: true });
-          direct.src = `${config.go2rtcUrl}/api/ws?src=printer_${id}`;
-          refs.directFallbackTimer = setTimeout(() => {
-            if (refs.camera.dataset.suspended === "1" || generation !== refs.cameraGeneration) return;
-            const ready = direct.video && direct.video.readyState >= 2;
-            if (!ready) attachMjpeg(id, refs, src);
-          }, 12000);
-          return;
-        }
-      } catch { /* Fall through to Bambuddy MJPEG. */ }
-    }
-    if (generation === refs.cameraGeneration) attachMjpeg(id, refs, src);
-  }
-
-  function suspendCameras() {
-    for (const refs of state.cards.values()) {
-      refs.cameraGeneration += 1;
-      refs.camera.dataset.suspended = "1";
-      refs.camera.removeAttribute("src");
-      stopDirectCamera(refs);
-    }
-  }
-
-  function resumeCameras() {
-    if (document.visibilityState === "hidden" || blockingOverlayOpen()) return;
-    state.printers.forEach((printer) => {
-      const refs = state.cards.get(Number(printer.id));
-      if (!refs || refs.camera.dataset.suspended !== "1") return;
-      delete refs.camera.dataset.suspended;
-      attachCamera(Number(printer.id));
-    });
-  }
-
-  function blockingOverlayOpen() {
-    const center = document.getElementById("notification-center");
-    return Boolean(document.querySelector(".modal-backdrop:not([hidden])")) || Boolean(center && !center.hidden);
   }
 
   function renderPrinters(printers) {
@@ -497,24 +380,6 @@ import "./video-stream.js";
     for (const card of dashboard.querySelectorAll("[data-printer-id]")) {
       const id = Number(card.dataset.printerId);
       cacheCard(card, id);
-      attachCamera(id);
-    }
-    applyFocus();
-  }
-
-  function applyFocus() {
-    const grid = document.querySelector(".printer-grid");
-    if (!grid) return;
-    grid.classList.toggle("has-focus", state.focusedPrinter !== null);
-    for (const card of grid.querySelectorAll("[data-printer-id]")) {
-      const focused = Number(card.dataset.printerId) === Number(state.focusedPrinter);
-      card.classList.toggle("is-focused", focused);
-      card.classList.toggle("is-dimmed", state.focusedPrinter !== null && !focused);
-      const button = card.querySelector('[data-command="focus"]');
-      if (button) {
-        button.classList.toggle("active", focused);
-        button.title = focused ? "Return to overview" : "Focus printer";
-      }
     }
   }
 
@@ -549,10 +414,14 @@ import "./video-stream.js";
     const printing = activeState(currentState);
 
     refs.statusDot.classList.toggle("offline", !status.connected);
+    refs.statusSignal?.classList.toggle("offline", !status.connected);
+    setText(refs.controlLink, status.connected ? "ONLINE" : "OFFLINE");
     setText(refs.statePill, meta.label);
     if (refs.statePill.dataset.tone !== meta.tone) refs.statePill.dataset.tone = meta.tone;
-    setText(refs.cameraState, meta.label);
-    setText(refs.cameraProgress, printing ? `${Math.round(progress)}%` : meta.label);
+    setText(refs.heroState, meta.label);
+    setText(refs.heroProgress, `${Math.round(progress)}%`);
+    setText(refs.heroEta, printing ? `Estimated completion ${finishTime(status.remaining_time)}` : (status.connected ? "Standing by for next assignment" : "Printer link unavailable"));
+    if (refs.progressOrbit) refs.progressOrbit.style.setProperty("--progress", `${progress}%`);
     setText(refs.jobName, cleanJobName(status));
     setText(refs.jobProgress, `${Math.round(progress)}%`);
     const progressWidth = `${progress}%`;
@@ -701,12 +570,10 @@ import "./video-stream.js";
   function showModal(id) {
     const modal = document.getElementById(id);
     if (modal) modal.hidden = false;
-    if (state.performance !== "full") suspendCameras();
   }
   function closeModal(id) {
     const modal = document.getElementById(id);
     if (modal) modal.hidden = true;
-    if (!blockingOverlayOpen()) resumeCameras();
   }
 
   const commonHmsMessages = {
@@ -876,7 +743,6 @@ import "./video-stream.js";
     center.hidden = false;
     button?.classList.add("active");
     button?.setAttribute("aria-expanded", "true");
-    if (state.performance !== "full") suspendCameras();
     renderNotificationCenter();
   }
 
@@ -894,7 +760,6 @@ import "./video-stream.js";
     button?.classList.remove("active");
     button?.setAttribute("aria-expanded", "false");
     showNotificationList();
-    if (!blockingOverlayOpen()) resumeCameras();
   }
 
   function noticeText(status, meta) {
@@ -1062,33 +927,25 @@ import "./video-stream.js";
     document.getElementById("settings-button")?.addEventListener("click", () => {
       document.getElementById("display-theme").value = state.theme;
       document.getElementById("display-layout").value = state.layout;
-      document.getElementById("camera-fps").value = String(state.cameraFps);
       document.getElementById("performance-mode").value = state.performance;
       document.getElementById("poll-seconds").value = String(state.pollSeconds);
       showModal("settings-modal");
     });
     document.getElementById("save-settings")?.addEventListener("click", () => {
-      const nextFps = Number(document.getElementById("camera-fps").value) || 8;
       const nextPoll = Number(document.getElementById("poll-seconds").value) || 3;
       const nextTheme = document.getElementById("display-theme").value || "bambu";
       const nextLayout = document.getElementById("display-layout").value || "grid";
       const nextPerformance = document.getElementById("performance-mode").value || "balanced";
-      const cameraChanged = nextFps !== state.cameraFps || nextPerformance !== state.performance;
-      state.cameraFps = nextFps;
       state.pollSeconds = nextPoll;
       state.theme = nextTheme;
       state.layout = nextLayout;
       state.performance = nextPerformance;
-      localStorage.setItem("bcc-camera-fps", String(nextFps));
       localStorage.setItem("bcc-poll-seconds", String(nextPoll));
       localStorage.setItem("bcc-theme", nextTheme);
       localStorage.setItem("bcc-layout", nextLayout);
       localStorage.setItem("bcc-performance", nextPerformance);
-      state.focusedPrinter = null;
       applyAppearance();
-      applyFocus();
       schedulePolling();
-      if (cameraChanged) suspendCameras();
       closeModal("settings-modal");
       toast("Display settings saved");
     });
@@ -1110,10 +967,6 @@ import "./video-stream.js";
       const status = state.statuses.get(id);
       switch (button.dataset.command) {
         case "details": showStatusDetails(id); break;
-        case "focus":
-          state.focusedPrinter = state.focusedPrinter === id ? null : id;
-          applyFocus();
-          break;
         case "pause-resume":
           if (String(status?.state).toUpperCase() === "PAUSE") command(id, "/print/resume", "Resume command sent");
           else command(id, "/print/pause", "Pause command sent");
@@ -1126,8 +979,7 @@ import "./video-stream.js";
       }
     });
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden") suspendCameras();
-      else { requestWakeLock(); resumeCameras(); pollStatuses(); }
+      if (document.visibilityState !== "hidden") { requestWakeLock(); pollStatuses(); }
     });
   }
 
